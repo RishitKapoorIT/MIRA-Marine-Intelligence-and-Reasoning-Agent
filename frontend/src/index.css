@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: #0A0C0F;
+    color: #ffffff;
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #131A22;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1E2D3D;
+    border-radius: 2px;
+  }
+}
+
+@layer utilities {
+  .micro-label {
+    @apply text-xs font-semibold uppercase tracking-micro text-orca-muted;
+  }
+
+  .card {
+    @apply bg-orca-surface border border-orca-border rounded-xl;
+  }
+
+  .card-hover {
+    @apply hover:bg-orca-surface-2 transition-colors duration-150;
+  }
+}
+
+/* Leaflet overrides — keep map tiles dark-edged */
+.leaflet-container {
+  background: #0e1822 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Fix Leaflet marker icon paths broken by Vite bundling */
+.leaflet-default-icon-path {
+  background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
+}

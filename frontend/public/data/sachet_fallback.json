@@ -1,0 +1,24 @@
+[
+  {
+    "id": "sachet-fallback-001",
+    "title": "CYCLONE WATCH — Bay of Bengal",
+    "severity": "Severe",
+    "area": "Bay of Bengal — Eastern Coastal Districts",
+    "onset": "2026-09-03T00:00:00Z",
+    "expires": "2026-09-05T18:00:00Z",
+    "lat": 15.5,
+    "lon": 88.0,
+    "isMock": true
+  },
+  {
+    "id": "sachet-fallback-002",
+    "title": "HIGH WAVE WARNING — Arabian Sea",
+    "severity": "Moderate",
+    "area": "Arabian Sea — Karnataka & Goa Coast",
+    "onset": "2026-09-03T06:00:00Z",
+    "expires": "2026-09-04T06:00:00Z",
+    "lat": 14.8,
+    "lon": 72.5,
+    "isMock": true
+  }
+]

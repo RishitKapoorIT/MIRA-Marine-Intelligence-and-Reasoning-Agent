@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+.DS_Store

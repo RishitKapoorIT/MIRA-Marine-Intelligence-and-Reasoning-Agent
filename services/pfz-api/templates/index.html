@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Potential Fishing Zone (PFZ) Predictor API</title>
+    <!-- Google Fonts & FontAwesome Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-dark: #090d16;
+            --card-bg: rgba(18, 26, 43, 0.75);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #06b6d4;
+            --primary-glow: rgba(6, 182, 212, 0.3);
+            --accent-blue: #3b82f6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --best-color: #10b981;
+            --best-bg: rgba(16, 185, 129, 0.15);
+            --good-color: #3b82f6;
+            --good-bg: rgba(59, 130, 246, 0.15);
+            --poor-color: #ef4444;
+            --poor-bg: rgba(239, 68, 68, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.12) 0%, transparent 40%);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 1320px;
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 28px;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            margin-bottom: 28px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary), var(--accent-blue));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #fff;
+            box-shadow: 0 0 20px var(--primary-glow);
+        }
+
+        .logo-text h1 {
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #fff, #a5f3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-text p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #34d399;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 440px 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-main);
+        }
+
+        .card-title i {
+            color: var(--primary);
+        }
+
+        .btn-action-sm {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--text-muted);
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-action-sm:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        /* Form Controls */
+        .controls-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+
+        }
+
+        .form-select, .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-select:focus, .form-input:focus {
+            border-color: var(--primary);
+        }
+
+        .coords-scroll-container {
+            max-height: 480px;
+            overflow-y: auto;
+            padding-right: 6px;
+        }
+
+        .coords-scroll-container::-webkit-scrollbar {
+            width: 6px;
+        }
+        .coords-scroll-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+        }
+
+        .coord-row {
+            display: grid;
+            grid-template-columns: 36px 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .coord-idx {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--primary), var(--accent-blue));
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 16px;
+            box-shadow: 0 4px 20px var(--primary-glow);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(6, 182, 212, 0.5);
+        }
+
+        /* Summary Stats Cards */
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-num {
+            font-size: 26px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card.total .stat-num { color: #f8fafc; }
+        .stat-card.best .stat-num { color: var(--best-color); }
+        .stat-card.good .stat-num { color: var(--good-color); }
+        .stat-card.poor .stat-num { color: var(--poor-color); }
+
+        /* Table Results */
+        .results-table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px 14px;
+            color: var(--text-muted);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .zone-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .zone-tag.BEST { background: var(--best-bg); color: var(--best-color); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .zone-tag.GOOD { background: var(--good-bg); color: var(--good-color); border: 1px solid rgba(59, 130, 246, 0.3); }
+        .zone-tag.POOR { background: var(--poor-bg); color: var(--poor-color); border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        .progress-bar-bg {
+            width: 80px;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 3px;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .btn-inspect {
+            padding: 4px 8px;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-inspect:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        /* Feature Modal Drawer */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: #0f172a;
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            width: 520px;
+            max-width: 90%;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .feature-box {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .feature-key {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .feature-val {
+            font-size: 14px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #fff;
+            margin-top: 2px;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div class="logo-area">
+                <div class="logo-icon"><i class="fa-solid fa-fish-fins"></i></div>
+                <div class="logo-text">
+                    <h1>Potential Fishing Zone (PFZ) AI</h1>
+                    <p>Machine Learning Prediction Service & Environmental Feature Synthesizer</p>
+                </div>
+            </div>
+            <div class="badge-status">
+                <span class="pulse-dot"></span> API Online & Ready
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="dashboard-grid">
+            <!-- Left Panel: Input Controls -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-location-dot"></i> Input 20 Coordinates
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="btn-action-sm" onclick="randomize20Coords()">
+                            <i class="fa-solid fa-dice"></i> 20 Random
+                        </button>
+                        <button class="btn-action-sm" onclick="clearCoords()">
+                            <i class="fa-solid fa-trash-can"></i> Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="controls-bar">
+                    <div class="input-group">
+                        <label>Target Year</label>
+                        <select id="targetYear" class="form-select">
+                            <option value="">Auto / Random</option>
+                            <option value="2024" selected>2024</option>
+                            <option value="2023">2023</option>
+                            <option value="2022">2022</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Target Month</label>
+                        <select id="targetMonth" class="form-select">
+                            <option value="">Auto / Random</option>
+                            <option value="1">January</option>
+                            <option value="3">March</option>
+                            <option value="6" selected>June</option>
+                            <option value="9">September</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="coords-scroll-container" id="coordsInputsList">
+                    <!-- 20 Input Rows generated dynamically -->
+                </div>
+
+                <button class="btn-primary" id="btnRunPrediction" onclick="runBatchPrediction()">
+                    <i class="fa-solid fa-bolt"></i> Run Batch Prediction (20 Points)
+                </button>
+            </div>
+
+            <!-- Right Panel: Results & Analytics -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fa-solid fa-chart-pie"></i> Fishing Zone Predictions & Analysis
+                    </div>
+                    <a href="/docs" target="_blank" class="btn-action-sm" style="text-decoration: none;">
+                        <i class="fa-solid fa-code"></i> Swagger OpenAPI Docs
+                    </a>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="summary-row">
+                    <div class="stat-card total">
+                        <div class="stat-label">Total Points</div>
+                        <div class="stat-num" id="statTotal">0</div>
+                    </div>
+                    <div class="stat-card best">
+                        <div class="stat-label">Best Zones</div>
+                        <div class="stat-num" id="statBest">0</div>
+                    </div>
+                    <div class="stat-card good">
+                        <div class="stat-label">Good Zones</div>
+                        <div class="stat-num" id="statGood">0</div>
+                    </div>
+                    <div class="stat-card poor">
+                        <div class="stat-label">Poor Zones</div>
+                        <div class="stat-num" id="statPoor">0</div>
+                    </div>
+                </div>
+
+                <!-- Results Table -->
+                <div class="results-table-container">
+                    <table id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Latitude</th>
+                                <th>Longitude</th>
+                                <th>Prediction</th>
+                                <th>Confidence</th>
+                                <th>Features</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTbody">
+                            <!-- Populated after API run -->
+                        </tbody>
+                    </table>
+                    
+                    <div class="empty-state" id="emptyState">
+                        <i class="fa-solid fa-compass"></i>
+                        <p>No predictions executed yet.<br>Click <strong>"20 Random"</strong> then <strong>"Run Batch Prediction"</strong> to test the ML model.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Detail Modal -->
+    <div class="modal-overlay" id="featureModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 style="font-size: 16px; color: #fff;">
+                    <i class="fa-solid fa-sliders" style="color: var(--primary);"></i> 
+                    Generated Environmental Features (#<span id="modalPointIdx"></span>)
+                </h3>
+                <button class="btn-action-sm" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="feature-grid" id="modalFeatureGrid">
+                <!-- Dynamically filled -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Preset sample 20 ocean coordinates around Indian Coast / Arabian Sea / Bay of Bengal
+        const defaultSampleCoords = [
+            { lat: 10.5421, lon: 75.8321 },
+            { lat: 8.2410, lon: 77.2104 },
+            { lat: 12.9814, lon: 80.2510 },
+            { lat: 15.2993, lon: 73.9142 },
+            { lat: 17.6868, lon: 83.2185 },
+            { lat: 19.0760, lon: 72.8777 },
+            { lat: 21.6412, lon: 69.6012 },
+            { lat: 9.9312, lon: 76.2673 },
+            { lat: 6.9271, lon: 79.8612 },
+            { lat: 11.6234, lon: 92.7264 },
+            { lat: 13.0827, lon: 80.2707 },
+            { lat: 18.0123, lon: 83.5124 },
+            { lat: 20.2961, lon: 85.8245 },
+            { lat: 22.5726, lon: 88.3639 },
+            { lat: 7.2906, lon: 80.6337 },
+            { lat: 5.9485, lon: 80.5353 },
+            { lat: 14.5421, lon: 74.3120 },
+            { lat: 16.5412, lon: 82.2104 },
+            { lat: 11.9401, lon: 79.8341 },
+            { lat: 10.1245, lon: 79.2312 }
+        ];
+
+        let globalPredictionResults = [];
+
+        // Build 20 Input Rows
+        function initInputRows() {
+            const container = document.getElementById('coordsInputsList');
+            container.innerHTML = '';
+
+            for (let i = 0; i < 20; i++) {
+                const preset = defaultSampleCoords[i] || { lat: (5 + i*0.8).toFixed(4), lon: (70 + i*1.2).toFixed(4) };
+                const row = document.createElement('div');
+                row.className = 'coord-row';
+                row.innerHTML = `
+                    <div class="coord-idx">#${i + 1}</div>
+                    <input type="number" step="any" class="form-input mono" id="lat_${i}" placeholder="Latitude" value="${preset.lat}">
+                    <input type="number" step="any" class="form-input mono" id="lon_${i}" placeholder="Longitude" value="${preset.lon}">
+                `;
+                container.appendChild(row);
+            }
+        }
+
+        // Randomize 20 Coordinates within dataset ocean bounds
+        function randomize20Coords() {
+            for (let i = 0; i < 20; i++) {
+                // Lat: 0.5 to 24.0, Lon: 61.0 to 98.0
+                const rLat = (Math.random() * 23.5 + 0.5).toFixed(4);
+                const rLon = (Math.random() * 37.0 + 61.0).toFixed(4);
+                document.getElementById(`lat_${i}`).value = rLat;
+                document.getElementById(`lon_${i}`).value = rLon;
+            }
+        }
+
+        function clearCoords() {
+            for (let i = 0; i < 20; i++) {
+                document.getElementById(`lat_${i}`).value = '';
+                document.getElementById(`lon_${i}`).value = '';
+            }
+        }
+
+        // Run Batch Prediction
+        async function runBatchPrediction() {
+            const coordinates = [];
+            for (let i = 0; i < 20; i++) {
+                const latVal = parseFloat(document.getElementById(`lat_${i}`).value);
+                const lonVal = parseFloat(document.getElementById(`lon_${i}`).value);
+                if (!isNaN(latVal) && !isNaN(lonVal)) {
+                    coordinates.push({ latitude: latVal, longitude: lonVal });
+                }
+            }
+
+            if (coordinates.length === 0) {
+                alert("Please enter at least one lat/long coordinate pair.");
+                return;
+            }
+
+            const yearVal = document.getElementById('targetYear').value;
+            const monthVal = document.getElementById('targetMonth').value;
+
+            const payload = {
+                coordinates: coordinates,
+                year: yearVal ? parseInt(yearVal) : null,
+                month: monthVal ? parseInt(monthVal) : null
+            };
+
+            const btn = document.getElementById('btnRunPrediction');
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing Model Inference...`;
+
+            try {
+                const res = await fetch('/api/v1/predict/batch_coords', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(`API Error: ${err.detail || 'Failed to predict'}`);
+                    return;
+                }
+
+                const data = await res.json();
+                globalPredictionResults = data.predictions;
+                renderResults(data);
+            } catch (err) {
+                console.error(err);
+                alert("Connection failed! Make sure FastAPI server is running.");
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Run Batch Prediction (20 Points)`;
+            }
+        }
+
+        // Render Results Table
+        function renderResults(data) {
+            document.getElementById('emptyState').style.display = 'none';
+
+            // Summary Stats
+            document.getElementById('statTotal').innerText = data.total_inputs;
+            document.getElementById('statBest').innerText = data.zone_summary.BEST || 0;
+            document.getElementById('statGood').innerText = data.zone_summary.GOOD || 0;
+            document.getElementById('statPoor').innerText = data.zone_summary.POOR || 0;
+
+            const tbody = document.getElementById('resultsTbody');
+            tbody.innerHTML = '';
+
+            data.predictions.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="mono" style="color: var(--primary);">#${item.input_id}</td>
+                    <td class="mono">${item.latitude.toFixed(4)}</td>
+                    <td class="mono">${item.longitude.toFixed(4)}</td>
+                    <td>
+                        <span class="zone-tag ${item.predicted_zone}">
+                            <i class="fa-solid ${getZoneIcon(item.predicted_zone)}"></i> ${item.predicted_zone}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" style="width: ${item.confidence_percent}%;"></div>
+                        </div>
+                        <span class="mono">${item.confidence_percent}%</span>
+                    </td>
+                    <td>
+                        <button class="btn-inspect" onclick="openModal(${idx})">
+                            <i class="fa-solid fa-eye"></i> Details
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function getZoneIcon(zone) {
+            if (zone === 'BEST') return 'fa-circle-check';
+            if (zone === 'GOOD') return 'fa-thumbs-up';
+            return 'fa-triangle-exclamation';
+        }
+
+        // Modal for feature inspection
+        function openModal(idx) {
+            const item = globalPredictionResults[idx];
+            if (!item) return;
+
+            document.getElementById('modalPointIdx').innerText = item.input_id;
+            const grid = document.getElementById('modalFeatureGrid');
+            grid.innerHTML = '';
+
+            const feats = item.features_generated;
+            for (const [k, v] of Object.entries(feats)) {
+                const box = document.createElement('div');
+                box.className = 'feature-box';
+                box.innerHTML = `
+                    <div class="feature-key">${k.replace('_', ' ')}</div>
+                    <div class="feature-val">${v}</div>
+                `;
+                grid.appendChild(box);
+            }
+
+            document.getElementById('featureModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('featureModal').classList.remove('active');
+        }
+
+        // Run on load
+        window.addEventListener('DOMContentLoaded', initInputRows);
+    </script>
+</body>
+</html>
