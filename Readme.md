@@ -352,4 +352,3 @@ cee6899 feat(chat): implement Frames 03, 04, 05 conversational workspace, agent 
 3fcef23 feat(backend): stand up FastAPI PFZ prediction service with XGBoost model
 ```
 
-*Built with ❤️ for the Smart India Hackathon (SIH).*
