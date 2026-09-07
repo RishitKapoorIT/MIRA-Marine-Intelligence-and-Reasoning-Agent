@@ -1,0 +1,113 @@
+{
+  "nav": {
+    "chat": "Chat",
+    "maps": "Maps",
+    "analytics": "Analytics",
+    "dashboard": "Dashboard",
+    "pfz": "PFZ Zones",
+    "hazards": "Hazards",
+    "route": "Safe Routes",
+    "profile": "Profile",
+    "login": "Login",
+    "logout": "Logout"
+  },
+  "welcome": {
+    "hero_title": "Marine Intelligence and Reasoning Agent",
+    "tagline": "Real-time Potential Fishing Zones, Satellite Ocean Telemetry, and Hazard-Avoidance Routing for Indian Coastal Waters.",
+    "ask_placeholder": "Ask ORCA (e.g., 'Identify best fishing zones near Kolkata' or 'Swell forecast near Mangalore')...",
+    "recent_queries": "Recent Coastal Queries",
+    "quick_actions": "Quick Maritime Actions",
+    "languages": "Languages"
+  },
+  "chat": {
+    "ask_placeholder": "Ask ORCA about fishing zones, SST, sea swell, safe routes...",
+    "send": "Send",
+    "synthesizing": "Synthesizing ocean telemetry and ML predictions...",
+    "view_map": "View on Map",
+    "plot_route": "Plot Safe Route",
+    "details": "Details",
+    "hide_details": "Hide Details",
+    "evidence_title": "Satellite Telemetry Evidence (2x2 Grid)",
+    "jump_top": "Jump to Top",
+    "jump_bottom": "Jump to Bottom"
+  },
+  "badges": {
+    "best": "Good catch chance",
+    "good": "Moderate",
+    "poor": "Low",
+    "critical": "Critical Danger",
+    "warning": "Warning",
+    "advisory": "Advisory"
+  },
+  "maps": {
+    "title": "India Marine Map",
+    "layers_panel": "Map Layers",
+    "pfz": "PFZ (Potential Fishing)",
+    "weather": "Weather / Wave Swell",
+    "hazards": "Hazards & Exclusion",
+    "boundaries": "Boundaries / MPAs",
+    "sst": "Sea Surface Temp (SST)",
+    "chlorophyll": "Chlorophyll-a Bloom",
+    "safe_route": "Safe Route"
+  },
+  "pfz": {
+    "title": "Identified Fishing Zones",
+    "highest_yield": "Highest Yield",
+    "nearest": "Nearest",
+    "safest": "Safest",
+    "plot_route": "Plot Route",
+    "navigate": "Navigate to Zone",
+    "details": "Details",
+    "sector": "Sector"
+  },
+  "hazards": {
+    "title": "Maritime Safety & Hazards",
+    "emergency_banner": "ORCA EMERGENCY ALERT",
+    "view_instruction": "View Instruction",
+    "route_around": "Route around hazard",
+    "details": "Details"
+  },
+  "route": {
+    "title": "Safe Route Planning",
+    "origin": "Origin Harbor / Anchorage",
+    "destination": "Destination Target",
+    "waypoint": "Optional Waypoint",
+    "optimal": "Safest Optimal (Hazard-Free)",
+    "alternative": "Alternative Coastal Path",
+    "departure": "Departure Time"
+  },
+  "analytics": {
+    "title": "Ocean Environmental Analytics",
+    "sst_avg": "SST Average",
+    "chlorophyll": "Chlorophyll-a",
+    "current_speed": "Current Speed",
+    "wave_height": "Wave Height",
+    "thermal_gradient": "Sea Surface Temperature Frontal Distribution",
+    "phytoplankton": "Chlorophyll-a Oceanic Phytoplankton Density"
+  },
+  "profile": {
+    "title": "Captain & Vessel Profile",
+    "subtitle": "Manage your home harbor, saved default route, and regional identity.",
+    "phone": "Registered Mobile",
+    "name": "Full Name / Vessel Master",
+    "safe_house": "Safe House (Home Harbor / Fallback GPS)",
+    "safe_house_desc": "Used as your home base fallback when GPS is denied, and sets default focus across all screens.",
+    "safe_route": "Safe Route (Saved Origin & Destination)",
+    "safe_route_desc": "Pre-fills your default transit route in Route Planning.",
+    "aadhaar": "Aadhaar Number (Optional Verification)",
+    "aadhaar_desc": "Optional identity badge. Never shared with third-party services.",
+    "language": "Preferred Language",
+    "save": "Save Profile Changes",
+    "saved_success": "Profile updated successfully!"
+  },
+  "auth": {
+    "login_title": "Login to ORCA",
+    "login_subtitle": "Enter your registered Indian mobile number to receive a 6-digit verification code.",
+    "phone_label": "Mobile Phone Number",
+    "send_otp": "Send Verification Code",
+    "otp_label": "Enter 6-Digit Code",
+    "verify_otp": "Verify & Establish Session",
+    "dev_hint": "Demo Mode: Use code 123456 or check backend console.",
+    "resend": "Resend Code"
+  }
+}

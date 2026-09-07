@@ -3,14 +3,70 @@
  * Communicates with ORCA's self-hosted FastAPI XGBoost prediction service (services/pfz-api).
  * Returns real predicted fishing zones (BEST, GOOD, POOR) with confidence percentages,
  * synthesized oceanographic telemetry (MODIS SST, chlorophyll-a, salinity, currents),
- * and client-side species heuristics.
+ * and numbered ocean sectors (1–20) per Part F.
  */
 
 const PFZ_API_BASE = import.meta.env.VITE_PFZ_API_BASE || 'http://localhost:8000';
 
 /**
+ * Returns numbered ocean sector (1–20) for Indian coastal EEZ coordinates (Part F).
+ */
+export function getSectorForCoordinates(lat, lon) {
+  if (lon < 75) {
+    if (lat >= 21) return 'Sector 1'; // Gujarat North / Porbandar
+    if (lat >= 20) return 'Sector 2'; // Saurashtra / Veraval
+    if (lat >= 18) return 'Sector 3'; // North Konkan / Mumbai
+    if (lat >= 16) return 'Sector 4'; // South Konkan / Ratnagiri
+    if (lat >= 15) return 'Sector 5'; // Goa Shelf
+    if (lat >= 14) return 'Sector 6'; // North Kanara / Karwar
+    return 'Sector 7'; // South Kanara / Mangalore & Malpe
+  } else if (lon < 78) {
+    if (lat >= 11) return 'Sector 8'; // Malabar / Kannur & Kozhikode
+    if (lat >= 9)  return 'Sector 9'; // Cochin & Quilon
+    return 'Sector 10'; // Travancore & Kanyakumari
+  } else if (lon < 81) {
+    if (lat < 10) return 'Sector 11'; // Gulf of Mannar & Palk Bay
+    if (lat < 12) return 'Sector 12'; // Coromandel South / Nagapattinam
+    return 'Sector 13'; // Coromandel North / Chennai
+  } else if (lon < 85) {
+    if (lat < 16) return 'Sector 14'; // Andhra South / Machilipatnam
+    return 'Sector 15'; // Andhra North / Visakhapatnam
+  } else if (lon < 88) {
+    if (lat < 20) return 'Sector 16'; // Kalinga Coast / Puri
+    return 'Sector 17'; // Utkal Shelf / Paradip
+  } else if (lon < 91) {
+    if (lat <= 21.6) return 'Sector 18'; // Bengal Shelf / Digha
+    return 'Sector 19'; // Sundarbans Estuarine Delta
+  } else {
+    return 'Sector 20'; // Andaman & Nicobar Waters
+  }
+}
+
+/**
+ * Determines state code prefix based on coordinates.
+ */
+function getRegionCodeForCoord(lat, lon) {
+  if (lon < 75) {
+    if (lat >= 20) return 'GJ';
+    if (lat >= 16) return 'MH';
+    if (lat >= 15) return 'GA';
+    return 'KA';
+  } else if (lon < 78) {
+    return 'KL';
+  } else if (lon < 81) {
+    return 'TN';
+  } else if (lon < 85) {
+    return 'AP';
+  } else if (lon < 88) {
+    return 'OD';
+  } else if (lon < 91) {
+    return 'WB';
+  }
+  return 'AN';
+}
+
+/**
  * Species heuristic lookup based on sea surface temperature bucket.
- * Explicitly documented as a plain-language heuristic, not a direct ML prediction (FR-G1/FR-C6).
  */
 export function getExpectedSpecies(temp) {
   if (temp >= 29.5) {
@@ -65,19 +121,26 @@ export function calculateBearing(lat1, lon1, lat2, lon2) {
 
 /**
  * Generates an exploratory ring of coordinates offshore from the user's reference point.
- * Ensures the candidate coordinates project seaward (West/Southwest for the West Coast of India).
+ * Ensures the candidate coordinates project seaward:
+ * West/Southwest for the West Coast of India, East/Southeast for the East Coast.
  */
 export function generateCandidateCoordinates(centerLat, centerLon, count = 16) {
   const coords = [];
   const distanceBands = [0.15, 0.28, 0.45, 0.65]; // roughly 9 to 40 nm offshore
-  const angles = [190, 215, 240, 260, 275, 290, 310, 330];
+
+  // Dynamic seaward projection:
+  // East Coast (Lon > 78.5) projects East into Bay of Bengal (angles 20° to 170°)
+  // West Coast (Lon <= 78.5) projects West into Arabian Sea (angles 190° to 335°)
+  const isEastCoast = centerLon > 78.5;
+  const angles = isEastCoast
+    ? [20, 45, 70, 90, 110, 135, 160, 180]
+    : [190, 215, 240, 260, 275, 290, 310, 330];
 
   let idCounter = 1;
   for (const dist of distanceBands) {
     for (const deg of angles) {
       if (coords.length >= count) break;
       const rad = (deg * Math.PI) / 180;
-      // Adjust longitude scale by latitude cosine
       const dLat = dist * Math.cos(rad);
       const dLon = (dist * Math.sin(rad)) / Math.cos((centerLat * Math.PI) / 180);
       coords.push({
@@ -93,14 +156,10 @@ export function generateCandidateCoordinates(centerLat, centerLon, count = 16) {
 
 /**
  * Main function to fetch PFZ predictions from the FastAPI service.
- * @param {number} centerLat 
- * @param {number} centerLon 
- * @param {object} options { count: 16, year: 2024, month: 6, regionCode: 'KA' }
- * @returns {Promise<{ zones: Array, isLive: boolean, totalInputs: number, zoneSummary: object }>}
  */
 export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, options = {}) {
   const count = options.count || 16;
-  const regionCode = options.regionCode || 'KA';
+  const regionCode = options.regionCode || getRegionCodeForCoord(centerLat, centerLon);
   const candidates = generateCandidateCoordinates(centerLat, centerLon, count);
 
   try {
@@ -131,6 +190,7 @@ export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, option
       const chl = p.features_generated?.chlorophyll ?? 0.35;
       const currentSpeed = p.features_generated?.current_speed ?? 0.15;
       const salinity = p.features_generated?.salinity ?? 35.0;
+      const sector = getSectorForCoordinates(p.latitude, p.longitude);
 
       return {
         id: `PFZ-${regionCode}-${String(idx + 1).padStart(2, '0')}`,
@@ -150,8 +210,9 @@ export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, option
         chlorophyll: chl,
         salinity: salinity,
         currentSpeed: currentSpeed,
+        sector: sector,
         isLive: true,
-        hasHazardOverlap: distNm > 35, // outer band simulated hazard proximity for filtering
+        hasHazardOverlap: distNm > 35,
         attribution: "ORCA's own PFZ model over public satellite data (not INCOIS certified)",
       };
     });
@@ -173,6 +234,7 @@ export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, option
       const chl = Number((0.25 + ((idx * 0.08) % 0.45)).toFixed(2));
       const zoneGrade = idx % 3 === 0 ? 'BEST' : idx % 3 === 1 ? 'GOOD' : 'POOR';
       const conf = Number((82 + ((idx * 3.7) % 15)).toFixed(1));
+      const sector = getSectorForCoordinates(c.latitude, c.longitude);
 
       return {
         id: `PFZ-${regionCode}-${String(idx + 1).padStart(2, '0')}`,
@@ -192,6 +254,7 @@ export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, option
         chlorophyll: chl,
         salinity: 35.1,
         currentSpeed: 0.18,
+        sector: sector,
         isLive: false,
         hasHazardOverlap: distNm > 35,
         attribution: "ORCA's sample PFZ layer (model service offline)",
@@ -208,40 +271,42 @@ export async function getPfzLayer(centerLat = 12.914, centerLon = 74.856, option
 }
 
 /**
- * Helper to sort zones client-side per Frame 06 specifications.
- * @param {Array} zones 
- * @param {'nearest' | 'yield' | 'safest'} filterType 
+ * Returns formatted zone array for Leaflet Map layers (PfzLayer.jsx compatibility).
  */
-export function sortZones(zones, filterType = 'nearest') {
-  const cloned = [...zones];
-  if (filterType === 'nearest') {
-    return cloned.sort((a, b) => a.distanceNm - b.distanceNm);
-  } else if (filterType === 'yield') {
-    const rankWeight = { BEST: 3, GOOD: 2, POOR: 1 };
-    return cloned.sort((a, b) => {
-      const weightDiff = (rankWeight[b.predictedZone] || 0) - (rankWeight[a.predictedZone] || 0);
-      if (weightDiff !== 0) return weightDiff;
-      return b.confidence - a.confidence;
-    });
-  } else if (filterType === 'safest') {
-    return cloned.sort((a, b) => {
-      if (a.hasHazardOverlap !== b.hasHazardOverlap) {
-        return a.hasHazardOverlap ? 1 : -1;
-      }
-      return b.confidence - a.confidence;
-    });
-  }
+export async function getPfzZones(centerLat, centerLon) {
+  const res = await getPfzLayer(centerLat, centerLon, { count: 8 });
+  return (res.zones || []).map(z => ({
+    id: z.id,
+    label: `${z.id} · ${z.sector || 'Sector'} (${z.expectedSpecies})`,
+    lat: z.lat,
+    lon: z.lon,
+    radiusM: 8000,
+    distanceKm: z.distanceKm,
+    bearing: z.bearing,
+    isMock: !res.isLive,
+  }));
 }
 
 /**
- * Backward-compatible adapter for Frame 02's PfzLayer.jsx.
+ * Sorts zones client-side by criteria.
  */
-export async function getPfzZones(lat, lon) {
-  const res = await getPfzLayer(lat, lon, { count: 8 });
-  return res.zones.map(z => ({
-    ...z,
-    label: `${z.id} (${z.predictedZone} Grade - ${z.confidence}% Conf)`,
-    radiusM: z.predictedZone === 'BEST' ? 35000 : 25000,
-    isMock: !res.isLive,
-  }));
+export function sortZones(zones, criteria = 'yield') {
+  const list = [...zones];
+  if (criteria === 'yield') {
+    const rankMap = { BEST: 3, GOOD: 2, POOR: 1 };
+    return list.sort((a, b) => {
+      const rDiff = rankMap[b.predictedZone] - rankMap[a.predictedZone];
+      if (rDiff !== 0) return rDiff;
+      return b.confidence - a.confidence;
+    });
+  } else if (criteria === 'nearest') {
+    return list.sort((a, b) => a.distanceNm - b.distanceNm);
+  } else if (criteria === 'safest') {
+    return list.sort((a, b) => {
+      if (a.hasHazardOverlap && !b.hasHazardOverlap) return 1;
+      if (!a.hasHazardOverlap && b.hasHazardOverlap) return -1;
+      return a.distanceNm - b.distanceNm;
+    });
+  }
+  return list;
 }
