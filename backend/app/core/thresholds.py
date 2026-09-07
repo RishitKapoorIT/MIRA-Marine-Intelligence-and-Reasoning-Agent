@@ -44,9 +44,33 @@ class AlertThresholds(BaseModel):
     expired_retention_days: int = 7
 
 
+class SafetyThresholds(BaseModel):
+    """FR-E2.2 go/no-go cutoffs.
+
+    THESE NUMBERS ARE PLACEHOLDERS AND HAVE NOT BEEN VALIDATED BY ANY MARINE
+    AUTHORITY OR DOMAIN EXPERT. They are ordered plausibly for a small
+    open-boat fishing craft so the logic can be built and tested, but the
+    actual values must be reviewed against IMD small-craft advisory criteria
+    and local vessel classes before any real user sees a verdict. RK-9
+    anticipates retuning; this is the file where it happens.
+    """
+
+    wave_height_caution_m: float = 2.0
+    wave_height_unsafe_m: float = 3.0
+    wind_speed_caution_ms: float = 10.0
+    wind_speed_unsafe_ms: float = 15.0
+    wind_gust_caution_ms: float = 14.0
+    wind_gust_unsafe_ms: float = 20.0
+    current_caution_ms: float = 1.0
+    visibility_caution_m: float = 2000.0
+    # FR-C6.2 — forecast data older than this cannot support a "safe" verdict.
+    max_forecast_age_hours: float = 6.0
+
+
 class Thresholds(BaseModel):
     pfz: PfzThresholds
     alerts: AlertThresholds = AlertThresholds()
+    safety: SafetyThresholds = SafetyThresholds()
 
 
 @lru_cache

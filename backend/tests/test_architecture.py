@@ -40,3 +40,26 @@ for tool in sorted((root / "tools").glob("*.py")):
 print("dependency direction: no tool imports app.api")
 print()
 print("ARCHITECTURE CHECKS PASSED")
+
+# --- Step 4b additions ---
+
+# FR-E2: the safety verdict must be decidable without an LLM.
+verdict_imports = imports_of(root / "safety/verdict.py")
+bad = {m for m in verdict_imports if m.startswith("app.agents") or m.split(".")[0] in {"groq","langchain","langgraph","langchain_groq","openai"}}
+assert not bad, bad
+print("FR-E2: safety/verdict.py imports no agent/LLM module ->", bad or "NONE")
+
+# The risk agent explains a verdict; it must not import the verdict engine
+# and recompute one of its own.
+risk_imports = imports_of(root / "agents/specialists/risk_agent.py")
+assert "app.safety.verdict" not in risk_imports, risk_imports
+print("FR-E2: risk_agent.py does not import the verdict engine -> explains only")
+
+# Disclosure text lives in one registry (SRS 6.9).
+for path in list((root/"agents").rglob("*.py")) + list((root/"api").rglob("*.py")):
+    src = path.read_text()
+    assert "not an official government warning" not in src, path
+print("SRS 6.9: no disclosure text duplicated outside safety/disclosures.py")
+
+print()
+print("ARCHITECTURE CHECKS PASSED (step 4b)")

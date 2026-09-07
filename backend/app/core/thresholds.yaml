@@ -12,3 +12,14 @@ pfz:
 alerts:
   default_radius_km: 25         # FR-F5.3 default alerts-view radius
   expired_retention_days: 7     # FR-F5.6 / FR-F5.9
+
+safety:
+  wave_height_caution_m: 2.0
+  wave_height_unsafe_m: 3.0
+  wind_speed_caution_ms: 10.0
+  wind_speed_unsafe_ms: 15.0
+  wind_gust_caution_ms: 14.0
+  wind_gust_unsafe_ms: 20.0
+  current_caution_ms: 1.0
+  visibility_caution_m: 2000
+  max_forecast_age_hours: 6
