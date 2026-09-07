@@ -17,3 +17,6 @@ xgboost
 jinja2
 langchain-groq 
 firebase-admin
+itsdangerous 
+pyyaml 
+shapely

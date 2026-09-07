@@ -1,0 +1,14 @@
+pfz:
+  grid:
+    # Karnataka coastal waters — Iteration 1 (FR-E1, RK-9)
+    bbox: { min_lat: 12.0, max_lat: 15.2, min_lon: 72.5, max_lon: 74.9 }
+    spacing_deg: 0.05
+  min_zone_area_km2: 100        # FR-E1.7
+  composite_days: 3             # FR-E1.10
+  generations_retained: 2       # current + one known-good (FR-E1.15)
+  salinity_constant_psu: 34.5   # no real-time source — labelled in evidence trace
+  max_staleness_hours: 120   # FR-C6.2 — flag PFZ answers as stale beyond this
+
+alerts:
+  default_radius_km: 25         # FR-F5.3 default alerts-view radius
+  expired_retention_days: 7     # FR-F5.6 / FR-F5.9

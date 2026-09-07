@@ -118,6 +118,13 @@ class User(Base, TimestampMixin):
     is_demo: Mapped[bool] = mapped_column(server_default=text("false"), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # FR-H2.2 explicit-logout revocation. Firebase's own session-cookie
+    # mechanism caps expiresIn at 14 days, short of the signed-off 30-day
+    # requirement, so app/core/security.py issues its own signed token and
+    # uses this column to make logout an actual server-side revocation
+    # rather than a client-side-only cookie clear.
+    session_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
