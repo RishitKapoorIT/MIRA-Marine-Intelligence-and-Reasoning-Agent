@@ -1,307 +1,343 @@
 # ORCA / MIRA — Marine Intelligence and Reasoning Agent
-**Autonomous Multi-Agent Ocean Intelligence & Potential Fishing Zone (PFZ) Advisory Platform**
+**Autonomous Multi-Agent Ocean Intelligence, Potential Fishing Zone (PFZ) Advisory & Maritime Decision-Support Platform**
 
 [![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=black)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://sqlite.org/)
 [![XGBoost](https://img.shields.io/badge/XGBoost-2.1-FF6600)](https://xgboost.readthedocs.io/)
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9-199900?logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![Turf.js](https://img.shields.io/badge/Turf.js-Spatial-2ECC71)](https://turfjs.org/)
-[![Branch](https://img.shields.io/badge/Git%20Branch-Frontend-brightgreen)](https://github.com/RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent/tree/Frontend)
+[![i18next](https://img.shields.io/badge/i18next-Multilingual-26A69A?logo=i18next&logoColor=white)](https://www.i18next.com/)
+[![Git Branch](https://img.shields.io/badge/Git%20Branch-Frontend-brightgreen)](https://github.com/RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent/tree/Frontend)
 
 ---
 
-## 🌊 Overview
+## 🌊 Executive Platform Overview
 
-**ORCA (Marine Intelligence)** — also referred to as **MIRA (Marine Intelligence and Reasoning Agent)** — is an AI-powered maritime decision-support platform engineered for artisanal fishers, commercial vessel operators, and coastal maritime authorities. 
+**ORCA (Marine Intelligence)** — developed as **MIRA (Marine Intelligence and Reasoning Agent)** — is an end-to-end maritime intelligence and decision-support platform designed for artisanal fishers, commercial vessel operators, and coastal fisheries authorities across India.
 
-The system transitions traditional marine maps from static visualizations into an **explainable, multi-agent reasoning workspace**:
-1. Users ask natural-language maritime queries (e.g., *"Where are the highest-yield fishing zones near Mangalore?"* or *"Is the sea swell safe for motorized craft today?"*).
-2. A **visible multi-agent pipeline** orchestrates parallel sub-agent checks across oceanographic telemetry, weather models, and hazard zones.
-3. The platform synthesizes an **evidence-backed recommendation** featuring real machine-learning PFZ predictions, a 2×2 satellite telemetry evidence grid (SST, Chlorophyll, Wave Swell, Bathymetry), and a transparent logical reasoning chain.
-4. Integrated sub-views provide specialized interfaces for **PFZ Exploration (Frame 06)**, **Maritime Safety & Hazards (Frame 07)**, **Turf.js Hazard-Avoidance Routing (Frame 08)**, **Ocean Environmental Analytics (Frame 09)**, and a **Regional Coastal Authority Dashboard (Frame 10)**.
+Traditional maritime navigation tools force operators to mentally correlate disparate data: paper notices, radio broadcasts, static PDF advisories, and raw weather charts. ORCA transforms this experience into a unified, **explainable multi-agent workspace**:
+
+1. **Conversational Multi-Agent Reasoning**: Users ask natural questions in plain language (*"weather report of my area"*, *"where are the best fishing zones near Odisha"*, *"is it safe to sail today"*).
+2. **Dynamic Location Grounding**: The system grounds queries in the user's active profile **Safe House** harbor or dynamically geocodes coastal regions, states, and ports.
+3. **Machine Learning PFZ Synthesis**: Computes real-time fishing zone probabilities using a trained **XGBoost classification model** analyzing satellite sea surface temperature (SST) thermal fronts and ocean color chlorophyll-a.
+4. **Safety & Hazard Avoidance**: Displays real-time exclusion zones (55km cyclone boundaries, naval firing ranges) and calculates **hazard-avoiding navigational transit routes** with Turf.js.
+5. **App-Wide Multilingual Support**: Fully localized in **English**, **Hindi (हिन्दी)**, and **Kannada (ಕನ್ನಡ)** with instant switching.
+6. **Zero-Cost Free Data Guarantee**: Every data feed, map tile, and API is 100% free with no paid commercial licenses or billing accounts required.
 
 ---
 
-## 📁 Repository Structure
+## 🏗️ System Architecture & Data Flow
 
-```
-MIRA-Marine-Intelligence-and-Reasoning-Agent/  (Branch: Frontend)
-├── frontend/                                   # React + Vite Web Application
-│   ├── public/                                 # Static GIS assets & fallback data
-│   │   ├── data/
-│   │   │   ├── india_eez.geojson               # Indian Exclusive Economic Zone boundaries
-│   │   │   └── sachet_fallback.json            # NDMA SACHET hazard cache (FR-C6 zero-blank guarantee)
-│   │   └── vite.svg
-│   ├── src/
-│   │   ├── assets/                             # Icons, graphics, logos
-│   │   ├── config/                             # Map configurations & endpoints
-│   │   │   └── map.js                          # Basemap URLs, bounding boxes, API bases
-│   │   ├── data/                               # Data-adapter layer (every external call lives here)
-│   │   │   ├── boundaries.js                   # Territorial waters & marine protected zones
-│   │   │   ├── chlorophyll.js                  # MODIS Ocean Color chlor_a data adapter
-│   │   │   ├── hazards.js                      # NDMA SACHET CAP feed & regional exclusion zones
-│   │   │   ├── pfz.js                          # Client adapter for self-hosted FastAPI XGBoost service
-│   │   │   ├── routing.js                      # Turf.js client-side marine routing & port registry
-│   │   │   ├── sst.js                          # Sea Surface Temperature telemetry adapter
-│   │   │   ├── vessels.js                      # Authority vessel fleet telemetry (P4 persona)
-│   │   │   └── weather.js                      # Open-Meteo Marine & Forecast API adapter
-│   │   ├── hooks/                              # Custom React state & geolocation hooks
-│   │   │   ├── useBearingDistance.js           # Great-circle calculations
-│   │   │   ├── useGeolocation.js               # Browser GPS with Mangalore fallback
-│   │   │   └── useLayerState.js                # Map layer toggle state management
-│   │   ├── components/
-│   │   │   ├── layout/                         # Persistent global chrome
-│   │   │   │   ├── Header.jsx                  # 64px top nav (Chat / Maps / Analytics / Dashboard)
-│   │   │   │   └── Sidebar.jsx                 # 280px conversation history & session switcher
-│   │   │   ├── welcome/                        # Frame 01: Welcome Screen
-│   │   │   ├── maps/                           # Frame 02: Interactive Marine Maps with toggleable layers
-│   │   │   ├── chat/                           # Frames 03, 04, 05: Conversational Workspace & Evidence
-│   │   │   ├── pfz/                            # Frame 06: PFZ Discovery & Ranking View
-│   │   │   ├── hazards/                        # Frame 07: Safety & Hazard Monitoring with Exclusion Zones
-│   │   │   ├── route/                          # Frame 08: Safe Route Planning with Turf.js Avoidance
-│   │   │   ├── analytics/                      # Frame 09: Ocean Environmental Analytics & Heatmaps
-│   │   │   ├── dashboard/                      # Frame 10: Regional Coastal Authority Fleet Dashboard
-│   │   │   └── ui/                             # Reusable badges, toggles, and chips
-│   │   ├── App.jsx                             # Declarative React Router definitions (Frames 01-10)
-│   │   ├── index.css                           # Tailwind CSS tokens, scrollbar, Leaflet overrides
-│   │   └── main.jsx                            # React entry point
-│   ├── package.json                            # Dependencies: React, Leaflet, Turf.js, Lucide-React
-│   ├── tailwind.config.js                      # Curated marine palette (#0A0C0F, #00D8FF, #30E8B8)
-│   └── vite.config.js                          # Vite build & bundler configuration
-│
-├── services/
-│   └── pfz-api/                                # Standalone Potential Fishing Zone Backend Service
-│       ├── main.py                             # FastAPI REST API with CORS enabled
-│       ├── generator.py                        # Oceanographic feature synthesis engine
-│       ├── xgboost_skin_fishing_model.pkl      # Trained XGBoost classifier artifact
-│       ├── final_fishing_zone_ML_with_chlorophyll.csv # Empirical statistical training dataset
-│       ├── requirements.txt                    # Python dependencies (fastapi, uvicorn, xgboost, etc.)
-│       └── templates/                          # Standalone HTML dashboard
-│           └── index.html
-│
-├── .gitignore                                  # Clean root ignore rules (node_modules, venvs, dist)
-└── Readme.md                                   # Comprehensive platform documentation
+```mermaid
+graph TD
+    User([Fisher / Vessel Master / Authority]) -->|Natural Query / Port Focus| UI[ORCA React + Vite Frontend :5173]
+
+    subgraph Frontend Architecture
+        UI --> AuthCtx[AuthContext - Mobile OTP & Profile]
+        UI --> LocCtx[LocationContext - 20 Sectors & States]
+        UI --> i18n[i18next Engine - EN / HI / KN]
+        UI --> Leaflet[Leaflet GIS & Turf.js Spatial Engine]
+        UI --> ChatEngine[Persistent Chat Thread Storage]
+    end
+
+    subgraph Backend Microservices
+        ChatEngine -->|Predict Zones & Telemetry| PFZ_API[PFZ ML Service :8000\nFastAPI + XGBoost]
+        AuthCtx -->|OTP / Session / Profile| AUTH_API[Auth & Profile Service :8001\nFastAPI + SQLite3]
+    end
+
+    subgraph External Open Data Providers
+        LocCtx -.->|Geocoding| OSM[OpenStreetMap Nominatim]
+        Leaflet -.->|Dark Marine Basemap| Carto[CARTO Dark / OSM Tiles]
+        UI -.->|Waves & Swell| OpenMeteoMarine[Open-Meteo Marine API]
+        UI -.->|Surface Winds| OpenMeteoForecast[Open-Meteo Forecast API]
+        UI -.->|Disaster Alerts| NDMA[NDMA SACHET CAP Feed]
+        PFZ_API -.->|Historical Distribution| MODIS[MODIS Aqua/Terra Datasets]
+    end
 ```
 
 ---
 
-## 🛰️ Where Data Is Taken From & How External Providers Work
+## ⚙️ Backend Microservices & API Specifications
 
-Per the **hard constraints** of the project, **every external data source, map layer, and API is 100% free with zero billing accounts or paid tiers required**:
+ORCA runs two standalone, self-contained Python FastAPI backend microservices with zero external database dependencies (no PostgreSQL or cloud required).
 
-| Layer / Feature | Source & Provider | Technical Endpoint / Method | Key/Billing Requirement |
+### 1. PFZ Machine Learning API (`services/pfz-api` — Port 8000)
+Serves machine learning predictions for Potential Fishing Zones using a trained gradient-boosted decision tree classifier.
+
+* **Technology**: Python 3.10+, FastAPI, Uvicorn, XGBoost 2.1, NumPy, Scikit-Learn.
+* **Trained Model**: `xgboost_skin_fishing_model.pkl`
+  * Trained on empirical Indian coastal oceanographic features: `YEAR`, `latitude`, `longitude`, `month`, `temperature` (°C), `salinity` (PSU), `eastward_current` (m/s), `northward_current` (m/s), `current_speed` (knots), `chlorophyll` (mg/m³).
+* **Feature Synthesis Engine**: `EnvironmentalFeatureGenerator` in `generator.py`
+  * Synthesizes physical ocean variables using statistical distributions derived from historical MODIS Aqua satellite data, bounded by seasonal oceanic parameters.
+
+#### Key Endpoints:
+| Method | Endpoint | Description | Request Payload / Params |
 |---|---|---|---|
-| **PFZ ML Prediction** | Self-hosted XGBoost Model (`services/pfz-api`) | `POST /api/v1/predict/batch_coords` | **None** (Self-contained FastAPI service) |
-| **Ocean Telemetry Synthesis** | Empirical distributions over historical satellite data | `EnvironmentalFeatureGenerator` in `generator.py` | **None** (Statistical distributions from training dataset) |
-| **Marine Maps Basemap** | OpenStreetMap / CARTO Dark standard tiles | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | **None** (Open-access tile servers) |
-| **Wave Height & Swell** | Open-Meteo Marine API | `https://marine-api.open-meteo.com/v1/marine` | **None** (Keyless, free open-access) |
-| **Wind Speed & Weather** | Open-Meteo Forecast API | `https://api.open-meteo.com/v1/forecast` | **None** (Keyless, free open-access) |
-| **Hazards & Cyclones** | NDMA SACHET CAP Feed + Fallback | `https://sachet.ndma.gov.in/cap_public_website/FeedService` via CORS proxy | **None** (Public Indian emergency feed) |
-| **EEZ Boundaries** | Marineregions.org / Survey of India | Bundled GeoJSON (`public/data/india_eez.geojson`) | **None** (Open GIS dataset) |
-| **Marine Route Solving** | Turf.js Spatial Library | Client-side spatial geometry (`@turf/turf`) | **None** (Local client computation) |
-| **Port Search & Geocoding**| OpenStreetMap Nominatim | `https://nominatim.openstreetmap.org/search` | **None** (Public geocoder with custom UA) |
-| **Authority AIS Fleet** | Simulated telemetry feed (`vessels.js`) | Local adapter adhering to AIS specifications | **None** (Simulated per Iteration 3 specs) |
+| `GET` | `/health` | Health check & model status | Returns loaded model class and feature schema |
+| `POST` | `/api/v1/predict/batch_coords` | Batch PFZ evaluation for candidate sites | `{ "center_lat": 12.91, "center_lon": 74.85, "count": 8 }` |
+| `POST` | `/api/v1/predict/zone` | Diagnostic prediction for single coordinate | `{ "lat": 12.85, "lon": 74.70, "features": {...} }` |
+
+* **Sample Response (`/api/v1/predict/batch_coords`)**:
+  ```json
+  {
+    "status": "success",
+    "total_evaluated": 8,
+    "zones": [
+      {
+        "id": "PFZ-KA-01",
+        "lat": 12.766,
+        "lon": 74.829,
+        "predicted_zone": "BEST",
+        "probability": 0.942,
+        "expected_species": "Indian Mackerel & Oil Sardine",
+        "distance_nm": 9.2,
+        "bearing": "190° S",
+        "temperature": 30.49,
+        "chlorophyll": 0.0778,
+        "sector": "Sector 7"
+      }
+    ]
+  }
+  ```
 
 ---
 
-## 🗺️ How Maps & Spatial Layers Are Used
+### 2. Auth & User Profile API (`services/auth-api` — Port 8001)
+Provides mobile OTP authentication, persistent session cookies, and user profile management (Safe House harbor, saved default route, optional Aadhaar verification, preferred language).
 
-Maps are rendered using **Leaflet 1.9.4** and **React-Leaflet 4.2.1** with custom dark-themed container overrides (`#0e1822` background to match satellite water bodies):
+* **Technology**: Python 3.10+, FastAPI, Uvicorn, SQLite3 (`users.db`), Pydantic v2.
+* **Storage**: Local SQLite database `users.db` created automatically on startup.
+* **Session Management**: Dual authentication via HTTP-only persistent cookie (`orca_session`, 30 days expiry) and Bearer token in headers (`Authorization: Bearer <token>`).
 
-### 1. Coordinate System & Projection
-- Standard geographic coordinates (**WGS 84, EPSG:4326**) are used across all adapters and GeoJSON layers.
-- Leaflet projects coordinates automatically to Spherical Mercator (**EPSG:3857**) for tile rendering.
+#### Database Schema:
+```sql
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    phone TEXT UNIQUE NOT NULL,
+    name TEXT,
+    safe_house TEXT,         -- JSON: { lat, lon, label }
+    safe_route TEXT,         -- JSON: { origin, destination, waypoint }
+    aadhaar TEXT,            -- Optional identity verification
+    preferred_language TEXT DEFAULT 'en',
+    onboarding_completed INTEGER DEFAULT 0,
+    created_at TEXT,
+    updated_at TEXT
+);
 
-### 2. The Data-Adapter Pattern (`src/data/*`)
-- In accordance with project rules, **no component calls external APIs directly**.
-- All data flows through typed asynchronous functions in `src/data/*` (`getPfzLayer()`, `getWeatherData()`, `getHazardAlerts()`, `computeMarineRoutes()`, `getVesselsData()`).
-- Components receive normalized JavaScript objects, ensuring zero disruption if backend URLs or endpoints are swapped.
+CREATE TABLE otp_tokens (
+    phone TEXT PRIMARY KEY,
+    otp TEXT NOT NULL,
+    expires_at REAL NOT NULL
+);
+```
 
-### 3. Layer Toggling Architecture
-- Map layers are managed through `useLayerState.js` providing boolean switches for:
-  - **PFZ Layer**: Renders high-yield fishing zones with grade badges (`BEST`, `GOOD`, `POOR`), distance/bearing, and expected species.
-  - **Hazards Layer**: Renders red translucent exclusion circles around critical storm/cyclone zones and amber circles around severe swell surges.
-  - **Boundaries Layer**: Displays India's 200-nautical-mile Exclusive Economic Zone (EEZ) polygon boundary.
-  - **SST & Chlorophyll Thermal Layers**: Visualizes satellite frontal boundaries and chlorophyll productivity.
-  - **Weather Layer**: Floats live wind and swell vectors.
-
-### 4. Dynamic Camera Controls
-- Custom `MapController` sub-components hook into Leaflet's internal map context using `useMap()`.
-- Automatically animates camera transitions (`flyTo`, `fitBounds`) when selecting a zone, changing departure ports, or refocusing on regional presets (Arabian Sea, Bay of Bengal, Laccadive Sea, Gulf of Mannar).
+#### Key Endpoints:
+| Method | Endpoint | Description | Details |
+|---|---|---|---|
+| `GET` | `/health` | Microservice & SQLite check | Returns online status |
+| `POST` | `/api/v1/auth/request-otp` | Request 6-digit login OTP | In dev mode generates code `123456`, logs to console, returns `dev_otp` |
+| `POST` | `/api/v1/auth/verify-otp` | Verify code & establish session | Validates code, creates new user or fetches existing, sets cookie, flags `is_new_user` |
+| `GET` | `/api/v1/profile` | Retrieve active profile | Returns name, phone, safe house, safe route, language |
+| `PUT` | `/api/v1/profile` | Update profile settings | Persists vessel master name, Safe House, Safe Route, Aadhaar, preferred language |
+| `POST` | `/api/v1/auth/logout` | Revoke session | Deletes session cookie |
 
 ---
 
-## 🚢 Detailed Breakdown: Frames 01 to 10
+### 3. External Keyless APIs & Data Lineage
 
-### Frame 01 — Welcome Screen (`/`)
-- **Visual Reference**: Figma Frame 01.
-- **Components**: `WelcomePage.jsx`, `HeroCard.jsx`, `QuickActionCard.jsx`.
-- **Functionality**:
-  - High-impact dark oceanic landing interface.
-  - Headline: *"Understand the ocean. Make safer decisions."*
-  - Quick action grid routing directly to deep features:
-    - 🎣 *Find fishing zones* → `/chat?q=Identify best fishing zones`
-    - 🌦 *Check sea safety* → `/chat?q=Check sea safety and swell conditions`
-    - ⚠️ *View active hazards* → `/hazards`
-    - 🧭 *Plan a safe route* → `/route`
-  - Multilingual footer banner (English · Hindi · Kannada).
+All external data sources operate **without API keys, billing accounts, or paid subscriptions**:
 
-### Frame 02 — Interactive Marine Maps Shell (`/maps`)
-- **Visual Reference**: Figma Frame 02.
-- **Components**: `MapsPage.jsx`, `MapArea.jsx`, `LeftSidebar.jsx`, `LayersPanel.jsx`, `BottomTabBar.jsx`.
-- **Functionality**:
-  - Full-screen Leaflet map with dark maritime styling.
-  - Collapsible layers panel toggling SST, Chlorophyll, Weather, Hazards, Boundaries, and PFZ markers.
-  - Water body quick presets (Arabian Sea, Bay of Bengal, Laccadive Sea, Gulf of Mannar).
-  - Search bar powered by OpenStreetMap Nominatim.
+| Layer / Purpose | Provider | Endpoint URL | Parameters / Method |
+|---|---|---|---|
+| **Wave Height & Swell** | Open-Meteo Marine | `https://marine-api.open-meteo.com/v1/marine` | `latitude`, `longitude`, `hourly=wave_height,wave_direction,wave_period,swell_wave_height` |
+| **Wind Speed & Direction** | Open-Meteo Forecast | `https://api.open-meteo.com/v1/forecast` | `latitude`, `longitude`, `current_weather=true,hourly=windspeed_10m,winddirection_10m` |
+| **Coastal Hazards / Weather** | NDMA SACHET Feed | `https://sachet.ndma.gov.in/cap_public_website/FeedService` | Public CAP XML feed via CORS proxy + local fallback cache |
+| **Port Search & Geocoding** | OpenStreetMap Nominatim | `https://nominatim.openstreetmap.org/search` | `format=json&countrycodes=in&q=<target>` with custom User-Agent |
+| **Marine Maps Basemap** | OpenStreetMap / CARTO | `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png` | Standard dark/ocean slippy tile map format |
+| **EEZ Maritime Boundaries** | Marineregions.org | `public/data/india_eez.geojson` | Pre-bundled GeoJSON polygon for Indian 200nm boundary |
 
-### Frame 03 — Conversational Workspace (`/chat`)
-- **Visual Reference**: Figma Frame 03.
-- **Components**: `ChatPage.jsx`, `Sidebar.jsx`.
-- **Functionality**:
-  - Right-aligned user bubbles; left-aligned ORCA responses with "O" avatar.
-  - Natural language summary accompanied by a **Structured PFZ Prediction Table**:
-    - Columns: `ZONE ID`, `DISTANCE & BEARING`, `EXPECTED SPECIES`, `SST · CHLOROPHYLL`, `CONFIDENCE`.
-    - Populated by real predictions from the self-hosted XGBoost model.
-  - Dual action buttons beneath table:
-    - **"View on Map"**: Routes to `/maps` centering that specific zone.
-    - **"Plot Safest Route"**: Routes to `/route` pre-filled with the target zone.
-  - Input area with attach and microphone icons (visual indicators per FR-A5/A6).
+---
 
-### Frame 04 — Real-Time Multi-Agent Processing State (`/chat`)
-- **Visual Reference**: Figma Frame 04.
-- **Component**: `AgentProcessingCard.jsx`.
-- **Functionality**:
-  - Inline thinking state rendered while a query is executing: *"ORCA is thinking... analyzing marine layers"*.
-  - 4-row live agent pipeline with animated progress spinners and elapsed timestamps:
-    1. **Planner Agent** — *"Scheduled 4 sub-agent checks across oceanographic layers"* (Completed · 0.2s).
-    2. **Weather Agent** — *"Fetched wind & wave data via Open-Meteo Marine telemetry"* (Driven by live API network latency).
-    3. **PFZ Agent** — *"Synthesizing MODIS chlorophyll & running XGBoost classifier"* (Resolves upon FastAPI response).
-    4. **Risk Assessment Agent** — *"Queueing boundary collision & hazard exclusion checks"* (Resolves upon boundary scan).
+## 💻 Frontend Application Architecture
 
-### Frame 05 — Satellite Telemetry Evidence & Explainability (`/chat`)
-- **Visual Reference**: Figma Frame 05.
-- **Component**: `EvidenceCards.jsx`.
-- **Functionality**:
-  - Recommended zone header with confidence pill (e.g., `94.2% Confidence`).
-  - **2×2 Satellite & Telemetry Evidence Grid**:
-    - **SST Card**: MODIS Thermal Front, recency (`2h ago`), temperature value, and plain-language physical interpretation.
-    - **Chlorophyll Card**: MODIS Ocean Color, chlorophyll density (`mg/m³`), and forage productivity interpretation.
-    - **Wave Swell Card**: Live Open-Meteo Marine feed, swell height, and vessel transit safety clearance.
-    - **Bathymetry Card**: GEBCO depth ridge contour (honestly marked as `Static Sample` per FR-C6).
-  - **Logical Reasoning Chain**: 3-step numbered narrative trace dynamically interpolating live values to explain *why* the zone was recommended.
+The frontend is a single-page application built with **React 18** and **Vite 5**, styled with custom **Tailwind CSS** marine tokens (`#0A0C0F` deep navy, `#00D8FF` cyan, `#30E8B8` seafoam green).
 
-### Frame 06 — PFZ Discovery & Exploration (`/pfz`)
-- **Visual Reference**: Figma Frame 06.
-- **Component**: `PfzExplorationPage.jsx`.
-- **Functionality**:
-  - Three client-side sorting filter pills:
-    - **Highest Yield**: Sorts by `BEST` grade first, then by highest ML confidence.
-    - **Nearest**: Sorts client-side by nautical distance from harbor.
-    - **Safest**: Sorts by lowest hazard overlap, prioritizing vessels with limited range.
-  - Ranked zone cards with distance, bearing, target species, and SST/Chlorophyll badges.
-  - Prominent **"Navigate to Zone"** button on the top recommendation card.
-  - Live Leaflet map displaying colored markers (Emerald for BEST, Cyan for GOOD, Amber for POOR) with pulsing selection halo.
-  - Bottom advisory banner stating plainly: *"via ORCA's own PFZ model over public satellite data (not an INCOIS-certified advisory)"* per Section 10.2.
+### 1. State Management & Context Architecture
+* **[AuthContext.jsx](file:///r:/SIH_2.0/orca-app/src/context/AuthContext.jsx)**:
+  * Manages user identity (`user`), authentication status (`isAuthenticated`), and token persistence.
+  * Handles OTP verification, logout, profile updates, and a 1-click **`loginAsDemo()`** helper for instant testing.
+  * Defaults unauthenticated visitors to `user = null` (no unauthorized auto-login).
+* **[LocationContext.jsx](file:///r:/SIH_2.0/orca-app/src/context/LocationContext.jsx)**:
+  * Manages the active focus harbor, coordinates, and coastal sector.
+  * Registry of 20+ maritime locations and all Indian coastal states (**Odisha**, **Kerala**, **Karnataka**, **Maharashtra**, **Gujarat**, **Tamil Nadu**, **Andhra Pradesh**, **West Bengal**, **Goa**, **Andaman**).
+  * Implements natural location parsing: queries like *"weather report of my area"*, *"how are waves here"*, or *"my place"* automatically resolve to the user's active harbor without needing rigid syntax.
+* **Persistent Chat State**:
+  * Stored in `localStorage` (`orca_chat_threads`, `orca_chat_messages_map`, `orca_active_thread_id`).
+  * Switching tabs (**Chat ↔ Maps ↔ Analytics ↔ Profile**) preserves all conversation history and scroll position.
 
-### Frame 07 — Maritime Safety & Hazards View (`/hazards`)
-- **Visual Reference**: Figma Frame 07.
-- **Component**: `HazardsPage.jsx`.
-- **Functionality**:
-  - Top critical emergency banner rendered when severe cyclone or weather alerts are active.
-  - **Emergency Instruction Modal**: Accessible via *"VIEW INSTRUCTION"* button, listing coastal evacuation and VHF Channel 16 directives.
-  - 3-number severity strip: **Critical** (Red), **Warnings** (Amber), **Advisories** (Blue).
-  - Scrollable hazard cards list with affected coastal sector and validity windows.
-  - Interactive Leaflet map rendering dashed translucent exclusion circle overlays (55km radius for cyclones).
-  - Floating map legend card.
+### 2. Application Modules & Routing (`App.jsx`)
 
-### Frame 08 — Safe Route Planning (`/route`)
-- **Visual Reference**: Figma Frame 08.
-- **Component**: `RoutePlanningPage.jsx`, `routing.js`.
-- **Functionality**:
-  - Indian ports database (Mangalore, New Mangalore, Malpe, Karwar, Mormugao, Panaji, Kochi, Kannur, Mumbai, Ratnagiri) with custom PFZ target pre-fill support.
-  - Optional intermediate waypoint selection and departure-time picker.
-  - **Turf.js Client-Side Spatial Routing Engine**:
-    - Calculates great-circle waypoints between departure and destination.
-    - Detects spatial intersections against active hazard exclusion circles.
-    - Calculates detour offset points circumventing danger zones.
-  - **2 Computed Route Alternatives**:
-    - *Safest Optimal (Hazard-Free)* — Safety Score: 98/100, 124.4 nm, 0 hazard zones traversed.
-    - *Alternative Inshore Contour* — Safety Score: 91/100, sheltered passage in rough swell.
-  - Turn-by-turn navigation leg cards with compass headings (e.g. `274° WNW`) and leg nautical miles.
-  - Route polyline and hazard exclusion overlays drawn on Leaflet map.
+| Route | View Component | Core Features |
+|---|---|---|
+| `/` | `WelcomePage.jsx` | Ocean landing page, regional status indicators, quick action navigation, language switcher. |
+| `/chat` | `ChatPage.jsx` | Multi-agent reasoning conversational workspace. Dedicated cards for Weather/Swell, Hazards, Safe Routes, and PFZ Matrix. |
+| `/maps` | `MapsPage.jsx` | Interactive full-screen Leaflet GIS map with toggleable layers (PFZ, Hazards, EEZ, Weather, SST, Chlorophyll). |
+| `/pfz` | `PfzExplorationPage.jsx` | Ranked candidate fishing zones sortable by **Highest Yield**, **Nearest**, or **Safest**, with live Leaflet markers. |
+| `/hazards` | `HazardsPage.jsx` | Real-time NDMA SACHET disaster warnings, 55km exclusion circle overlays, VHF Channel 16 emergency guidelines. |
+| `/route` | `RoutePlanningPage.jsx` | Turf.js client-side marine routing engine with automated hazard collision detection and detour waypoints. |
+| `/analytics`| `OceanAnalyticsPage.jsx` | Ocean environmental monitoring: live SST and Chlorophyll thermal gradient overlays, wave metrics, harbor switcher. |
+| `/dashboard`| `AuthorityDashboardPage.jsx` | Coastal authority fleet dashboard: live vessel AIS tracking, SOS/EPIRB emergency alerts, district compliance meters. |
+| `/profile` | `ProfilePage.jsx` | Manage Captain identity, Safe House harbor anchor, default safe route, optional Aadhaar, and language. |
+| `/login` | `LoginPage.jsx` | Mobile phone login, 6-digit OTP verification, first-time vessel master onboarding wizard, active session card. |
 
-### Frame 09 — Ocean Environmental Analytics (`/analytics`)
-- **Visual Reference**: Figma Frame 09.
-- **Component**: `OceanAnalyticsPage.jsx`.
-- **Functionality**:
-  - Top metric row (4 cards): **SST Average** (°C), **Chlorophyll-A** (mg/m³), **Current Speed** (m/s), **Wave Height** (m) with trend indicators.
-  - **Dual Visual Heatmap Panels**:
-    - *Sea Surface Temperature Frontal Distribution*: Leaflet thermal overlay with a 24°C–31.5°C color gradient spectrum.
-    - *Chlorophyll-a Oceanic Productivity*: Phytoplankton density overlay with an oligotrophic to active bloom gradient legend.
-  - Attribution cards citing MODIS, VIIRS, and Open-Meteo sources.
+---
 
-### Frame 10 — Regional Maritime Authority Dashboard (`/dashboard`)
-- **Visual Reference**: Figma Frame 10 / US-13, US-14.
-- **Component**: `AuthorityDashboardPage.jsx`, `vessels.js`.
-- **Functionality**:
-  - Tailored for Persona 4 (Coastal Maritime & Fisheries Authorities).
-  - 4 headline stat cards: **Monitored Vessel Fleet** (142 Active), **Emergency Beacons Active** (1 EPIRB Alert), **Active Warnings** (3 Bulletins), **Fleet Compliance Rate** (96.4%).
-  - Searchable **Regional Vessel Registry & Telemetry Feed Table**:
-    - Tracks vessel ID, name, vessel class, home harbor, live coordinates, speed (knots), and heading.
-    - Live status tags: `NORMAL` (Green), `GEOFENCE_ALERT` (Amber), `DISTRESS_SOS` (Red pulsating alert).
-  - Real-time **Regional Activity Event Log**: Timestamped dispatch log tracking emergency beacon alerts, buffer zone incursions, and port return docks.
-  - **District Fleet Compliance Progress Meters**: Horizontal compliance bars for Dakshina Kannada, Udupi, Uttara Kannada, and South Goa.
-  - Clear data honesty disclaimer indicating simulated AIS telemetry per project Iteration 3 specifications.
+## 🗺️ Geospatial & Mapping System
+
+The platform's spatial intelligence is powered by **Leaflet 1.9.4**, **React-Leaflet 4.2.1**, and **Turf.js (@turf/turf)**.
+
+### 1. Coordinate Systems & Projections
+* **Internal Data Representation**: Standard **WGS 84 (`EPSG:4326`)** decimal degrees across all GeoJSON datasets, port coordinates, and ML API payloads.
+* **Map Projection**: Projected automatically by Leaflet to **Spherical Mercator (`EPSG:3857`)** for smooth tile alignment.
+
+### 2. Spatial Algorithms (Turf.js)
+* **Great-Circle Trajectories**:
+  * Generates geodesic arc waypoints between departure and destination harbors.
+  * Calculates exact nautical distances (`turf.distance` in nautical miles) and compass bearings (`turf.bearing`).
+* **Hazard Collision Detection**:
+  * Represents cyclone watches and severe swell zones as polygon buffer circles (`turf.buffer` with 55km and 32km radii).
+  * Evaluates intersection between the planned route polyline and hazard circles (`turf.lineIntersect`).
+* **Automated Hazard Avoidance**:
+  * When a collision is detected, the engine calculates an offset waypoint tangent to the hazard circle circumference, routing the vessel around danger zones.
+
+### 3. Map Layering & Visualizations
+* **Tile Layers**: Dark maritime raster tiles rendered over `#0e1822` deep oceanic canvas.
+* **Vector Overlays**:
+  * Translucent exclusion circles (Red `#EF4444` for cyclones, Amber `#F59E0B` for rough swell, Blue `#3B82F6` for naval firing practice).
+  * GeoJSON polygon rendering of the 200-nautical-mile Exclusive Economic Zone (`india_eez.geojson`).
+* **PFZ Marker System**:
+  * Grade-based colored circular markers (Emerald for `BEST`, Cyan for `GOOD`, Amber for `POOR`).
+  * Interactive popups displaying species, distance, SST, and a direct *"Plot Safe Route"* button.
+* **Camera Animations**:
+  * `MapController` hooks utilize `map.flyTo()` and `map.fitBounds()` to smoothly animate camera transitions when selecting zones or switching coastal regions.
+
+---
+
+## 🌐 Multilingual & Localization Architecture (`i18n`)
+
+ORCA provides full app-wide localization to support Indian fishers in their native languages.
+
+### 1. Engine & Implementation
+* **Libraries**: `i18next` and `react-i18next`.
+* **Configuration**: Initialized in `src/i18n/i18n.js`.
+* **Supported Languages**:
+  * **English (`en`)** — Default
+  * **Hindi (`hi`)** — हिन्दी
+  * **Kannada (`kn`)** — ಕನ್ನಡ
+
+### 2. Storage & Dynamic Switching
+* **Instant Switching**: Clicking the language selector buttons (`EN`, `HI`, `KN`) in the global header or welcome page immediately re-renders all text tokens across the application without reloading the page.
+* **Dual Persistence**:
+  1. Client-side in `localStorage.getItem('orca_language')`.
+  2. Synced to the backend SQLite profile (`preferred_language`) so preferences persist across devices.
+
+### 3. Locale Dictionary Structure
+All translations live in `src/i18n/locales/` (`en.json`, `hi.json`, `kn.json`):
+* `nav.*`: Header navigation tabs, buttons, and titles.
+* `welcome.*`: Landing page hero headers, feature descriptions, and stats.
+* `auth.*`: Login headings, phone labels, OTP prompts, and dev notices.
+* `profile.*`: Identity fields, Safe House descriptions, Aadhaar notices, and save confirmations.
+* `chat.*`: Agent pipeline labels, jump-to-scroll buttons, input placeholders.
+* `analytics.*`: Metric cards, temperature scales, and telemetry citations.
+* `hazards.*`: Emergency instruction modal, severity tags, and advisory text.
+* `route.*`: Route planning headers, safety scores, and waypoint directions.
+* `badges.*`: Standardized confidence badges (**Good catch chance**, **Moderate**, **Low**).
+
+---
+
+## ⚓ Safe House & User Profile System
+
+The **Safe House** concept (introduced per Indian coastal fisheries requirements) serves as the anchor for vessel safety:
+
+1. **GPS Denied Fallback**: When satellite GPS is denied, disabled, or inaccurate, the Safe House coordinates automatically provide the home anchor.
+2. **Dynamic Context Provider**: Setting a Safe House in [ProfilePage.jsx](file:///r:/SIH_2.0/orca-app/src/components/profile/ProfilePage.jsx) automatically configures the default harbor, ocean analytics, weather forecast, and PFZ search area.
+3. **Safe Route Pre-fill**: The user's saved default route (origin harbor to destination harbor) automatically pre-fills the route planner.
+4. **Government Scheme Aadhaar**: An optional 12-digit Aadhaar identity field stored locally in encrypted form to qualify vessel operators for disaster relief funds and fuel subsidies without leaking data to third parties.
+
+---
+
+## 🛡️ Data Honesty & Safety Compliance (FR-C6)
+
+In strict adherence to project requirements:
+1. **No Simulated Data Presented as Live**: Where real-time satellite feeds require enterprise commercial subscriptions, UI elements are visibly labeled as **Sample / Simulated Telemetry**.
+2. **PFZ Attribution**: All PFZ cards and advisories state plainly: *"via ORCA's own PFZ model over public satellite data (not an INCOIS-certified advisory)"*.
+3. **Marine Routing Disclaimer**: Route alternatives generated via Turf.js are heuristic spatial solutions; they do not claim ECDIS or SOLAS navigation certification.
 
 ---
 
 ## ⚡ Quickstart & Local Execution Guide
 
 ### Prerequisites
-- **Node.js**: v18+ or v20+
-- **Python**: 3.10+ or 3.11+
-- **Git**
+* **Node.js**: v18.0.0 or higher (v20+ recommended)
+* **Python**: 3.10 or higher (with pip)
+* **Git**
 
 ---
 
-### Step 1: Start the PFZ Prediction Backend (FastAPI)
+### Step 1: Start the PFZ Machine Learning Service (Port 8000)
 
 ```bash
-# Navigate to the backend service directory
+# Navigate to the PFZ API directory
 cd services/pfz-api
 
-# Create and activate a Python virtual environment (if not already created)
+# Create and activate a Python virtual environment
 python -m venv venv
-# On Windows:
-venv\Scripts\activate
+# On Windows (PowerShell):
+venv\Scripts\Activate.ps1
 # On macOS/Linux:
 source venv/bin/activate
 
-# Install requirements
+# Install dependencies
 pip install -r requirements.txt
 
-# Launch the FastAPI service on port 8000
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# Start the service on port 8000
+python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
-
-- **Health Check**: Visit `http://localhost:8000/health` to verify model status:
-  ```json
-  {
-    "status": "online",
-    "model_loaded": true,
-    "model_type": "<class 'xgboost.sklearn.XGBClassifier'>",
-    "expected_features": ["YEAR", "latitude", "longitude", "month", "temperature", "salinity", "eastward_current", "northward_current", "current_speed", "chlorophyll"]
-  }
-  ```
-- **Interactive OpenAPI Documentation**: Visit `http://localhost:8000/docs`.
+* **Health Check**: Visit `http://127.0.0.1:8000/health` (returns `status: online`, `model_loaded: true`).
+* **API Documentation**: Visit `http://127.0.0.1:8000/docs`.
 
 ---
 
-### Step 2: Start the Frontend Application (Vite + React)
+### Step 2: Start the Auth & Profile Service (Port 8001)
 
-In a separate terminal:
+In a second terminal:
+
+```bash
+# Navigate to the Auth API directory
+cd services/auth-api
+
+# Activate the virtual environment
+# On Windows (PowerShell):
+..\..\venv\Scripts\Activate.ps1
+# On macOS/Linux:
+source ../../venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the service on port 8001
+python -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+```
+* **Health Check**: Visit `http://127.0.0.1:8001/health` (returns `status: online`, `db: sqlite3`).
+* **API Documentation**: Visit `http://127.0.0.1:8001/docs`.
+
+---
+
+### Step 3: Start the Frontend Application (Port 5173)
+
+In a third terminal:
 
 ```bash
 # Navigate to the frontend directory
@@ -310,46 +346,42 @@ cd frontend
 # Install Node dependencies
 npm install
 
-# Start the Vite development server on port 5173
+# Launch Vite development server
 npm run dev
 ```
 
-Open **`http://localhost:5173`** in your browser to explore all 10 frames.
+Open **`http://127.0.0.1:5173`** in your browser to launch ORCA.
 
 ---
 
-### Step 3: Verifying Production Build
+### Step 4: Verifying Production Build
 
 ```bash
 cd frontend
 npm run build
 ```
-Builds cleanly to `frontend/dist/` with 0 bundling errors.
+Builds cleanly to `dist/` with 0 bundling errors.
 
 ---
 
-## 🛡️ Data Honesty & Safety-First Disclosure (FR-C6)
+## 👨‍💻 Git Workflow & Commit History
 
-In strict adherence to project requirements:
-1. **No Mock Data Presented as Live**: Where live satellite or vessel feeds require enterprise commercial subscriptions (such as high-frequency satellite AIS or sub-meter bathymetry), UI elements are visibly and plainly labeled as **Sample / Simulated Telemetry**.
-2. **PFZ Attribution**: All PFZ cards and advisories state plainly: *"via ORCA's own PFZ model over public satellite data (not an INCOIS-certified advisory)"*.
-3. **Marine Routing Disclaimer**: Route alternatives generated via Turf.js are described as heuristic spatial solutions; they do not claim ECDIS or SOLAS navigation certification.
-
----
-
-## 👨‍💻 Git Workflow & Credits
-
-All code has been committed in granular, reviewable increments directly on the **`Frontend`** branch of [`RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent`](https://github.com/RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent/tree/Frontend):
+All development is maintained directly on the **`Frontend`** branch of [`RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent`](https://github.com/RishitKapoorIT/MIRA-Marine-Intelligence-and-Reasoning-Agent/tree/Frontend):
 
 ```
-ae62ef4 feat(dashboard): implement Frame 10 regional authority dashboard and fleet registry
-c98b00d feat(analytics): implement Frame 09 ocean analytics and dual heatmaps
-457a3e9 feat(route): implement Frame 08 safe route planning with Turf.js hazard avoidance
-87b69cc feat(hazards): implement Frame 07 safety and hazard view with exclusion zones
-ca44a5d feat(pfz): implement Frame 06 PFZ exploration with Nearest/Yield/Safety filters
-cee6899 feat(chat): implement Frames 03, 04, 05 conversational workspace, agent pipeline, and evidence cards
-3537a02 feat(frontend): scaffold React+Vite app shell, config, and Frames 01-02 base components
+8c26f5e fix(chat): persist threads across tab switches, support natural location queries, and add dedicated weather & hazard responses
+c4c68ed feat(auth): fix new user login flow, remove auto-login, add onboarding and demo shortcuts
+2be8817 feat(update3): implement Brief 3 fixes, SQLite auth backend, i18n switching, and sector zoning
+ae62ef4 feat(dashboard): implement regional authority dashboard and fleet registry
+c98b00d feat(analytics): implement ocean analytics and dual heatmaps
+457a3e9 feat(route): implement safe route planning with Turf.js hazard avoidance
+87b69cc feat(hazards): implement safety and hazard view with exclusion zones
+ca44a5d feat(pfz): implement PFZ exploration with Nearest/Yield/Safety filters
+cee6899 feat(chat): implement conversational workspace, agent pipeline, and evidence cards
+3537a02 feat(frontend): scaffold React+Vite app shell, config, and base components
 3fcef23 feat(backend): stand up FastAPI PFZ prediction service with XGBoost model
 ```
+
+---
 
 *Built with ❤️ for the Smart India Hackathon (SIH).*
