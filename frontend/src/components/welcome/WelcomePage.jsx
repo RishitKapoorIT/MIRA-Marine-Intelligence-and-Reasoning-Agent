@@ -63,13 +63,23 @@ export default function WelcomePage() {
           </button>
 
           {/* Profile / Login */}
-          <button
-            onClick={() => navigate('/profile')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-orca-surface-2 border border-orca-teal/40 text-orca-teal hover:bg-orca-teal hover:text-orca-bg transition-all"
-          >
-            <User size={13} />
-            <span>{isAuthenticated ? (user?.name?.split(' ')[0] || t('nav.profile')) : t('nav.login')}</span>
-          </button>
+          {isAuthenticated ? (
+            <button
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-orca-surface-2 border border-orca-teal/40 text-orca-teal hover:bg-orca-teal hover:text-orca-bg transition-all"
+            >
+              <User size={13} />
+              <span>{user?.name?.split(' ')[0] || t('nav.profile')}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-orca-teal text-orca-bg hover:bg-orca-teal/90 transition-all shadow-sm"
+            >
+              <User size={13} />
+              <span>{t('nav.login')}</span>
+            </button>
+          )}
         </div>
       </header>
 

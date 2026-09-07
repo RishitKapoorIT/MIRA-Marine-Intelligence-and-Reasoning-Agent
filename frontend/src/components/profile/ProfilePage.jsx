@@ -24,11 +24,11 @@ import {
 export default function ProfilePage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { user, updateProfile, logout, safeHouse, safeRoute } = useAuth();
+  const { user, isAuthenticated, updateProfile, logout, loginAsDemo, safeHouse, safeRoute } = useAuth();
   const { setCurrentLocation } = useLocationState();
 
-  const [name, setName] = useState(user?.name || 'Captain Ramanath K.');
-  const [phone] = useState(user?.phone || '+91 98450 12345');
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
   const [aadhaar, setAadhaar] = useState(user?.aadhaar || '');
   const [language, setLanguage] = useState(user?.preferred_language || i18n.language || 'en');
 
@@ -44,7 +44,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
-      setName(user.name || 'Captain Ramanath K.');
+      setName(user.name || '');
+      setPhone(user.phone || '');
       setAadhaar(user.aadhaar || '');
       setLanguage(user.preferred_language || i18n.language || 'en');
       if (user.safe_house) {
@@ -58,7 +59,7 @@ export default function ProfilePage() {
         if (user.safe_route.destination?.id) setDestPortId(user.safe_route.destination.id);
       }
     }
-  }, [user]);
+  }, [user, i18n.language]);
 
   const handleLanguageChange = (lng) => {
     setLanguage(lng);
@@ -108,7 +109,7 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
+    navigate('/login');
   };
 
   return (
@@ -134,13 +135,23 @@ export default function ProfilePage() {
             </p>
           </div>
 
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-all self-start md:self-auto"
-          >
-            <LogOut size={14} />
-            <span>{t('nav.logout')}</span>
-          </button>
+          {isAuthenticated ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-all self-start md:self-auto"
+            >
+              <LogOut size={14} />
+              <span>{t('nav.logout')}</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-orca-teal text-orca-bg hover:bg-orca-teal/90 shadow-sm transition-all self-start md:self-auto"
+            >
+              <User size={14} />
+              <span>{t('nav.login')}</span>
+            </button>
+          )}
         </div>
 
         {savedSuccess && (
@@ -150,6 +161,38 @@ export default function ProfilePage() {
           </div>
         )}
 
+        {!isAuthenticated ? (
+          <div className="bg-orca-surface border border-orca-border rounded-2xl p-8 shadow-xl text-center space-y-6 max-w-lg mx-auto my-8">
+            <div className="w-16 h-16 rounded-2xl bg-orca-teal/15 text-orca-teal flex items-center justify-center border border-orca-teal/30 mx-auto">
+              <Shield size={32} />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-extrabold text-white tracking-tight">
+                Authentication Required
+              </h2>
+              <p className="text-xs text-orca-muted leading-relaxed">
+                You are currently browsing ORCA as a guest. Please sign in or register with your mobile phone number to configure your vessel master identity, safe house anchor harbor, and custom transit routes.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs bg-orca-teal hover:bg-orca-teal/90 text-orca-bg flex items-center justify-center gap-2 shadow-lg transition-all"
+              >
+                <User size={14} />
+                <span>Login / Register New User</span>
+              </button>
+              <button
+                onClick={async () => {
+                  await loginAsDemo();
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl font-semibold text-xs bg-orca-surface-2 border border-orca-border text-white hover:border-orca-teal/40 transition-all flex items-center justify-center gap-2"
+              >
+                <span>⚡ Try Demo Account</span>
+              </button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSave} className="space-y-6">
           {/* Identity Card */}
           <div className="bg-orca-surface border border-orca-border rounded-2xl p-5 md:p-6 shadow-xl space-y-4">
@@ -351,6 +394,7 @@ export default function ProfilePage() {
             </button>
           </div>
         </form>
+        )}
       </main>
     </div>
   );

@@ -25,16 +25,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function loadUser() {
       if (!token) {
-        // Provide demo fallback user session
-        setUser({
-          name: 'Captain Ramanath K.',
-          phone: '+91 98450 12345',
-          safe_house: DEFAULT_SAFE_HOUSE,
-          safe_route: DEFAULT_SAFE_ROUTE,
-          aadhaar: '',
-          preferred_language: localStorage.getItem('orca_language') || 'en',
-          onboarding_completed: true,
-        });
+        setUser(null);
         setLoading(false);
         return;
       }
@@ -55,18 +46,24 @@ export function AuthProvider({ children }) {
           // Token invalid or expired
           localStorage.removeItem('orca_auth_token');
           setToken('');
+          setUser(null);
         }
       } catch (err) {
-        console.warn('Auth backend offline, using cached/demo profile', err);
-        setUser({
-          name: 'Captain Ramanath K.',
-          phone: '+91 98450 12345',
-          safe_house: DEFAULT_SAFE_HOUSE,
-          safe_route: DEFAULT_SAFE_ROUTE,
-          aadhaar: '',
-          preferred_language: localStorage.getItem('orca_language') || 'en',
-          onboarding_completed: true,
-        });
+        console.warn('Auth backend offline, checking dev token', err);
+        if (token === 'demo-token' || token === 'dev-token') {
+          setUser({
+            id: 'demo-captain-1',
+            name: 'Captain Ramanath K.',
+            phone: '+91 98450 12345',
+            safe_house: DEFAULT_SAFE_HOUSE,
+            safe_route: DEFAULT_SAFE_ROUTE,
+            aadhaar: '',
+            preferred_language: localStorage.getItem('orca_language') || 'en',
+            onboarding_completed: true,
+          });
+        } else {
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -74,6 +71,23 @@ export function AuthProvider({ children }) {
 
     loadUser();
   }, [token]);
+
+  const loginAsDemo = async () => {
+    const demoUser = {
+      id: 'demo-captain-1',
+      name: 'Captain Ramanath K.',
+      phone: '+91 98450 12345',
+      safe_house: DEFAULT_SAFE_HOUSE,
+      safe_route: DEFAULT_SAFE_ROUTE,
+      aadhaar: '',
+      preferred_language: localStorage.getItem('orca_language') || 'en',
+      onboarding_completed: true,
+    };
+    setToken('demo-token');
+    localStorage.setItem('orca_auth_token', 'demo-token');
+    setUser(demoUser);
+    return demoUser;
+  };
 
   const requestOtp = async (phone) => {
     try {
@@ -111,20 +125,26 @@ export function AuthProvider({ children }) {
     } catch (err) {
       // Fallback dev login
       if (otp === '123456') {
+        const isDemo = phone.includes('98450') || phone.includes('12345');
         const fallbackUser = {
-          id: 'dev-user-1',
+          id: isDemo ? 'demo-user-1' : `dev-user-${Date.now()}`,
           phone,
-          name: 'Captain Ramanath K.',
+          name: isDemo ? 'Captain Ramanath K.' : '',
           safe_house: DEFAULT_SAFE_HOUSE,
           safe_route: DEFAULT_SAFE_ROUTE,
           aadhaar: '',
           preferred_language: localStorage.getItem('orca_language') || 'en',
-          onboarding_completed: true,
+          onboarding_completed: isDemo,
         };
         setUser(fallbackUser);
-        setToken('dev-token');
-        localStorage.setItem('orca_auth_token', 'dev-token');
-        return { status: 'authenticated', user: fallbackUser };
+        setToken(fallbackUser.id);
+        localStorage.setItem('orca_auth_token', fallbackUser.id);
+        return { 
+          status: 'authenticated', 
+          token: fallbackUser.id, 
+          is_new_user: !fallbackUser.onboarding_completed, 
+          user: fallbackUser 
+        };
       }
       throw err;
     }
@@ -182,6 +202,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         requestOtp,
         verifyOtp,
+        loginAsDemo,
         updateProfile,
         logout,
         safeHouse: user?.safe_house || DEFAULT_SAFE_HOUSE,

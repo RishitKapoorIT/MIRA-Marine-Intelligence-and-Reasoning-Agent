@@ -157,14 +157,24 @@ export default function Header() {
           </span>
         </div>
 
-        {/* User Profile Avatar */}
-        <button
-          onClick={() => navigate('/profile')}
-          title={isAuthenticated ? `Logged in: ${user?.name}` : 'Login / Profile'}
-          className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-600 to-orca-teal flex items-center justify-center text-xs font-bold text-white border border-white/20 shadow-sm hover:ring-2 hover:ring-orca-teal/40 transition-all flex-shrink-0"
-        >
-          {userInitials}
-        </button>
+        {/* User Profile Avatar or Login Button */}
+        {isAuthenticated ? (
+          <button
+            onClick={() => navigate('/profile')}
+            title={`Logged in: ${user?.name || user?.phone}`}
+            className="w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-600 to-orca-teal flex items-center justify-center text-xs font-bold text-white border border-white/20 shadow-sm hover:ring-2 hover:ring-orca-teal/40 transition-all flex-shrink-0"
+          >
+            {userInitials}
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate('/login')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-orca-teal text-orca-bg hover:bg-orca-teal/90 shadow-sm transition-all flex-shrink-0"
+          >
+            <User size={13} />
+            <span>{t('nav.login')}</span>
+          </button>
+        )}
       </div>
     </header>
   );
