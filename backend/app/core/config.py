@@ -8,6 +8,7 @@ is a change to these values, not to application code.
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -32,6 +33,14 @@ class Settings(BaseSettings):
     # --- Session / auth (FR-H2.2) ---
     session_secret: str = "change-me"
     session_lifetime_days: int = 30
+
+    # --- Development auth bypass ---
+    # Lets /chat and the other authenticated routes be exercised without a
+    # Firebase client. Guarded three ways: off by default, refused when
+    # app_env is production (see the validator below), and logged loudly at
+    # every startup so it cannot be left on unnoticed.
+    dev_auth_bypass: bool = False
+    dev_auth_phone: str = "+910000000001"
 
     # --- Firebase Phone Auth (EI-12, FR-H1.2) ---
     firebase_project_id: str = ""
@@ -65,6 +74,15 @@ class Settings(BaseSettings):
         "https://sachet.ndma.gov.in/cap_public_website/rss/rss_india.xml"
     )
     sachet_poll_interval_minutes: int = 15
+
+    @model_validator(mode="after")
+    def _refuse_bypass_in_production(self) -> "Settings":
+        if self.dev_auth_bypass and self.app_env.lower() in {"production", "prod"}:
+            raise ValueError(
+                "DEV_AUTH_BYPASS cannot be enabled when APP_ENV is production. "
+                "This would disable authentication entirely."
+            )
+        return self
 
     @property
     def sync_database_url(self) -> str:

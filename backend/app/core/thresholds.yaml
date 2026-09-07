@@ -8,6 +8,7 @@ pfz:
   generations_retained: 2       # current + one known-good (FR-E1.15)
   salinity_constant_psu: 34.5   # no real-time source — labelled in evidence trace
   max_staleness_hours: 120   # FR-C6.2 — flag PFZ answers as stale beyond this
+  min_coverage_fraction: 0.3
 
 alerts:
   default_radius_km: 25         # FR-F5.3 default alerts-view radius

@@ -113,12 +113,39 @@ def clear_session_cookie(response: Response) -> None:
 
 # --- FastAPI dependency ------------------------------------------------------
 
+async def _get_or_create_dev_user(db: AsyncSession) -> User:
+    """Development only. Reuses one stable account so turns accumulate in a
+    single conversation history across restarts."""
+    from sqlalchemy import select
+
+    result = await db.execute(
+        select(User).where(User.phone_number == settings.dev_auth_phone)
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        user = User(
+            firebase_uid="dev-bypass-user",
+            phone_number=settings.dev_auth_phone,
+            display_name="Dev User",
+            preferred_language="en",
+            is_demo=True,
+        )
+        db.add(user)
+        await db.flush()
+    return user
+
+
 async def get_current_user(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_session),
 ) -> User:
     """FR-H2.1 session read. FR-H2.2 sliding refresh and revocation check."""
+    # Development bypass. Settings refuses this combination when app_env is
+    # production, so this branch cannot be reached there.
+    if settings.dev_auth_bypass and not settings.is_production:
+        return await _get_or_create_dev_user(db)
+
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")

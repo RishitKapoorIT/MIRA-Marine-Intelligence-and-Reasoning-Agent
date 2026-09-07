@@ -18,6 +18,7 @@ from app.core.security import get_current_user
 from app.core.thresholds import thresholds
 from app.db.models import Alert, SourceStatus, User
 from app.db.session import get_session
+from app.tools.sachet_tool import read_ungeolocated_alerts
 
 router = APIRouter()
 
@@ -104,6 +105,11 @@ async def get_alerts(
             "is_expired": is_expired,
         }
 
+    # Alerts carrying no usable geometry (typically geocode-only district
+    # alerts) cannot be radius-matched. Without surfacing them separately they
+    # would be stored and never shown, and an empty list reads as an all-clear.
+    ungeolocated = await read_ungeolocated_alerts(db)
+
     return {
         "feed_status": "ok" if feed_ok else "unavailable",
         "feed_warning": warning,
@@ -111,5 +117,12 @@ async def get_alerts(
         "region": {"latitude": lat, "longitude": lon, "radius_km": radius_km},
         "active_alerts": [_out(a, False) for a in active_alerts],
         "expired_alerts": [_out(a, True) for a in expired_alerts],
+        "ungeolocated_alerts": [_out(a, False) for a in ungeolocated],
+        "ungeolocated_note": (
+            "These alerts name an affected area but carry no map geometry, so "
+            "they are not filtered by your location."
+            if ungeolocated
+            else None
+        ),
         "attribution": ATTRIBUTION,
     }

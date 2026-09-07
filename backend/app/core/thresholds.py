@@ -35,6 +35,11 @@ class PfzThresholds(BaseModel):
     # FR-C6.2 — how old a published generation may be before an answer must
     # disclose staleness.
     max_staleness_hours: float = 120.0
+    # FR-E1.9 — below this, an empty result means we could not see enough
+    # ocean (INSUFFICIENT_COVERAGE) rather than that nothing qualified.
+    # The configured bbox includes land, which permanently depresses coverage,
+    # so this is set low; tighten max_lon toward the coast to raise it.
+    min_coverage_fraction: float = 0.3
 
 
 class AlertThresholds(BaseModel):

@@ -1,5 +1,6 @@
 """FastAPI app factory."""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,8 +11,19 @@ from app.core.config import settings
 from app.db.session import dispose_engine
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.dev_auth_bypass:
+        logger.warning(
+            "=" * 72 + "\n"
+            "  DEV_AUTH_BYPASS IS ENABLED. Every request is authenticated as\n"
+            "  the development user (%s). Never enable this outside local\n"
+            "  development.\n" + "=" * 72,
+            settings.dev_auth_phone,
+        )
     yield
     await dispose_engine()
 
