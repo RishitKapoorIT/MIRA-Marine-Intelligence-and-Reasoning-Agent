@@ -10,6 +10,9 @@ venv/
 ENV/
 .env
 .env.*
+!.env.example
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
 .vscode/
 .idea/
 *.log
