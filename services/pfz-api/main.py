@@ -91,18 +91,61 @@ class BatchCoordinatesRequest(BaseModel):
     year: Optional[int] = Field(None, example=2024, description="Optional target year (2020-2026)")
     month: Optional[int] = Field(None, example=6, description="Optional target month (1-12)")
 
-class CustomFeatureItem(BaseModel):
-    YEAR: float = Field(2024.0, example=2024.0)
-    latitude: float = Field(..., example=10.5)
-    longitude: float = Field(..., example=76.2)
-    month: float = Field(..., example=6.0)
-    temperature: float = Field(..., example=29.5)
-    salinity: float = Field(..., example=34.2)
-    eastward_current: float = Field(..., example=-0.05)
-    northward_current: float = Field(..., example=0.12)
-    current_speed: Optional[float] = Field(None, example=0.13)
-    chlorophyll: float = Field(..., example=0.11)
+from datetime import datetime
 
+class CustomFeatureItem(BaseModel):
+    latitude: float
+    longitude: float
+    temperature: float
+    salinity: float
+    eastward_current: float
+    northward_current: float
+    chlorophyll: Optional[float] = None
+
+class BatchCustomRequest(BaseModel):
+    items: list[CustomFeatureItem]
+
+@app.post("/api/v1/predict/batch_custom")
+def predict_batch_custom(req: BatchCustomRequest):
+    # Get current year and month to satisfy the model's 10-feature requirement
+    current_year = float(datetime.utcnow().year)
+    current_month = float(datetime.utcnow().month)
+
+    rows = []
+    for it in req.items:
+        # Calculate current_speed if needed
+        speed = float(np.sqrt(it.eastward_current**2 + it.northward_current**2))
+        
+        # Build the 10-feature row in the EXACT order the model expects
+        # (Assuming the order: YEAR, latitude, longitude, month, temperature, salinity, eastward_current, northward_current, current_speed, chlorophyll)
+        rows.append([
+            current_year,
+            it.latitude,
+            it.longitude,
+            current_month,
+            it.temperature,
+            it.salinity,
+            it.eastward_current,
+            it.northward_current,
+            speed,
+            np.nan if it.chlorophyll is None else it.chlorophyll
+        ])
+
+    # Convert to NumPy array and predict
+    X = np.array(rows, dtype=float)
+    
+    # Optional: Re-align columns safely if your model has 'feature_names_in_'
+    if hasattr(model, 'feature_names_in_'):
+        df = pd.DataFrame(X, columns=['YEAR', 'latitude', 'longitude', 'month', 'temperature', 'salinity', 'eastward_current', 'northward_current', 'current_speed', 'chlorophyll'])
+        X = df[model.feature_names_in_].to_numpy()
+
+    labels = model.predict(X)
+    probs = model.predict_proba(X)
+
+    return {"predictions": [
+        {"predicted_zone": str(label), "confidence": float(p.max())}
+        for label, p in zip(labels, probs)
+    ]}
 
 # API Endpoints
 @app.get("/health", summary="Health Check")
