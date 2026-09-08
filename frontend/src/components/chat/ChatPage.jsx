@@ -8,7 +8,7 @@ import EvidenceCards from './EvidenceCards.jsx';
 import { getPfzLayer } from '../../data/pfz.js';
 import { getWeatherData } from '../../data/weather.js';
 import { SAMPLE_HAZARD_ZONES } from '../../data/hazards.js';
-import { useLocationState, getSectorForLatLon } from '../../context/LocationContext.jsx';
+import { useLocationState, getSectorForLatLon, KNOWN_COASTAL_LOCATIONS } from '../../context/LocationContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import {
   Send,
