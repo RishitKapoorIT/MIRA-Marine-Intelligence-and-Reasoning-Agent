@@ -11,12 +11,14 @@ import OceanAnalyticsPage from './components/analytics/OceanAnalyticsPage.jsx';
 import AuthorityDashboardPage from './components/dashboard/AuthorityDashboardPage.jsx';
 import LoginPage from './components/auth/LoginPage.jsx';
 import ProfilePage from './components/profile/ProfilePage.jsx';
+import StatusBanner from './components/layout/StatusBanner.jsx';
 
 export default function App() {
   return (
     <AuthProvider>
       <LocationProvider>
         <BrowserRouter>
+        <StatusBanner />
           <Routes>
             {/* Frame 01 — Welcome Screen */}
             <Route path="/" element={<WelcomePage />} />

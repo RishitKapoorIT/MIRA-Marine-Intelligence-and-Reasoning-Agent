@@ -1,217 +1,230 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { checkHealth, AuthError, NetworkError } from '../services/http.js';
+import * as authApi from '../services/auth.js';
+import * as profileApi from '../services/profile.js';
 
-const AUTH_API_BASE = import.meta.env.VITE_AUTH_API_BASE || 'http://localhost:8001';
+/**
+ * Authentication state, with the BACKEND as the single source of truth.
+ *
+ * WHAT CHANGED AND WHY IT MAY LOOK LIKE A REGRESSION
+ *
+ * The previous version treated a localStorage value as proof of login and, if
+ * the backend was unreachable, invented a user ("Captain Ramanath K.") and
+ * carried on. verifyOtp accepted "123456" client-side on any network failure,
+ * which is an authentication bypass that ships in the production bundle.
+ *
+ * Now: /auth/me decides. If the backend is down the app SAYS SO instead of
+ * appearing to work. That is a visible behaviour change and it is the point —
+ * a marine safety app that looks logged in and serves invented data is worse
+ * than one that admits it cannot reach the server.
+ *
+ * There is no token here. The session is an httpOnly cookie the browser sends
+ * automatically; JavaScript cannot read it, which is why the old localStorage
+ * bearer token is gone rather than relocated.
+ */
 
 const AuthContext = createContext(null);
 
-const DEFAULT_SAFE_HOUSE = {
-  lat: 12.8698,
-  lon: 74.8431,
-  label: 'Mangalore Old Port (Bunder)',
+export const AUTH_STATUS = {
+  LOADING: 'loading',
+  AUTHENTICATED: 'authenticated',
+  UNAUTHENTICATED: 'unauthenticated',
+  UNREACHABLE: 'unreachable', // backend down — NOT the same as logged out
 };
 
+/**
+ * Client-side only. The backend has no concept of a saved route: FR-E5 route
+ * planning is Iteration 3 and /route is a reference page for judges. Kept in
+ * localStorage so RoutePlanningPage and ProfilePage keep working, and named
+ * so nobody mistakes it for server state.
+ */
+const SAFE_ROUTE_KEY = 'orca_safe_route_local';
 const DEFAULT_SAFE_ROUTE = {
   origin: { id: 'port-mangalore', name: 'Mangalore Old Port (Bunder)', lat: 12.855, lon: 74.836, region: 'Karnataka' },
   destination: { id: 'port-malpe', name: 'Malpe Fisheries Harbor', lat: 13.348, lon: 74.701, region: 'Karnataka' },
   waypoint: null,
 };
 
-export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('orca_auth_token') || '');
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+function readLocalSafeRoute() {
+  try {
+    const saved = localStorage.getItem(SAFE_ROUTE_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_SAFE_ROUTE;
+  } catch {
+    return DEFAULT_SAFE_ROUTE;
+  }
+}
 
-  // Initialize and load user profile if token exists
-  useEffect(() => {
-    async function loadUser() {
-      if (!token) {
+/** Adds the snake_case aliases existing components already read, so Header,
+ *  ProfilePage and ChatPage keep working unchanged. */
+function decorate(profile) {
+  if (!profile) return null;
+  return {
+    ...profile,
+    preferred_language: profile.preferredLanguage,
+    onboarding_completed: profile.onboardingCompleted,
+    base_location: profile.baseLocation,
+  };
+}
+
+export function AuthProvider({ children }) {
+  const [status, setStatus] = useState(AUTH_STATUS.LOADING);
+  const [user, setUser] = useState(null);
+  const [backendError, setBackendError] = useState(null);
+  const [devBypassActive, setDevBypassActive] = useState(false);
+  const [appEnv, setAppEnv] = useState(null);
+  const [safeRoute, setSafeRouteState] = useState(readLocalSafeRoute);
+
+  /** Re-read session and profile from the backend. */
+  const refresh = useCallback(async () => {
+    try {
+      const session = await authApi.getCurrentUser();
+      if (!session) {
         setUser(null);
-        setLoading(false);
+        setStatus(AUTH_STATUS.UNAUTHENTICATED);
+        return null;
+      }
+      const profile = await profileApi.getProfile();
+      const decorated = decorate(profile);
+      setUser(decorated);
+      setStatus(AUTH_STATUS.AUTHENTICATED);
+      setBackendError(null);
+      return decorated;
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setUser(null);
+        setStatus(AUTH_STATUS.UNAUTHENTICATED);
+        return null;
+      }
+      // Network failure, 500, CORS. NOT a logout — say what actually happened.
+      setUser(null);
+      setStatus(AUTH_STATUS.UNREACHABLE);
+      setBackendError(
+        err instanceof NetworkError
+          ? 'Cannot reach the ORCA backend.'
+          : err.message || 'The ORCA backend returned an error.',
+      );
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      // Health first: it tells us whether dev bypass is on, so the banner
+      // states a fact instead of inferring one from a successful /auth/me.
+      const health = await checkHealth();
+      if (cancelled) return;
+      setDevBypassActive(Boolean(health.dev_auth_bypass));
+      setAppEnv(health.app_env || null);
+
+      if (!health.online) {
+        setStatus(AUTH_STATUS.UNREACHABLE);
+        setBackendError(`Cannot reach the ORCA backend (${health.reason}).`);
         return;
       }
+      await refresh();
+    })();
+    return () => { cancelled = true; };
+  }, [refresh]);
 
-      try {
-        const res = await fetch(`${AUTH_API_BASE}/api/v1/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-        } else {
-          // Token invalid or expired
-          localStorage.removeItem('orca_auth_token');
-          setToken('');
-          setUser(null);
-        }
-      } catch (err) {
-        console.warn('Auth backend offline, checking dev token', err);
-        if (token === 'demo-token' || token === 'dev-token') {
-          setUser({
-            id: 'demo-captain-1',
-            name: 'Captain Ramanath K.',
-            phone: '+91 98450 12345',
-            safe_house: DEFAULT_SAFE_HOUSE,
-            safe_route: DEFAULT_SAFE_ROUTE,
-            aadhaar: '',
-            preferred_language: localStorage.getItem('orca_language') || 'en',
-            onboarding_completed: true,
-          });
-        } else {
-          setUser(null);
-        }
-      } finally {
-        setLoading(false);
-      }
+  const logout = useCallback(async () => {
+    try {
+      await authApi.logout();
+    } finally {
+      setUser(null);
+      setStatus(AUTH_STATUS.UNAUTHENTICATED);
     }
+  }, []);
 
-    loadUser();
-  }, [token]);
+  const updateProfile = useCallback(async (updates = {}) => {
+    // Accepts both the old snake_case and the new camelCase call sites.
+    const next = await profileApi.updateProfile({
+      name: updates.name,
+      preferredLanguage: updates.preferredLanguage ?? updates.preferred_language,
+    });
+    const decorated = decorate(next);
+    setUser(decorated);
+    return decorated;
+  }, []);
 
-  const loginAsDemo = async () => {
-    const demoUser = {
-      id: 'demo-captain-1',
-      name: 'Captain Ramanath K.',
-      phone: '+91 98450 12345',
-      safe_house: DEFAULT_SAFE_HOUSE,
-      safe_route: DEFAULT_SAFE_ROUTE,
-      aadhaar: '',
-      preferred_language: localStorage.getItem('orca_language') || 'en',
-      onboarding_completed: true,
+  /** FR-H3.2 — consent is captured with the location, and the backend rejects
+   *  the call without it. */
+  const setBaseLocation = useCallback(async ({ lat, lon, label, consent }) => {
+    const next = await profileApi.setBaseLocation({ lat, lon, label, consent });
+    const decorated = decorate(next);
+    setUser(decorated);
+    return decorated;
+  }, []);
+
+  /** FR-H5.1 */
+  const deleteBaseLocation = useCallback(async () => {
+    const next = await profileApi.deleteBaseLocation();
+    const decorated = decorate(next);
+    setUser(decorated);
+    return decorated;
+  }, []);
+
+  const setSafeRoute = useCallback((route) => {
+    setSafeRouteState(route);
+    try {
+      localStorage.setItem(SAFE_ROUTE_KEY, JSON.stringify(route));
+    } catch { /* private browsing */ }
+  }, []);
+
+  /**
+   * Kept because ProfilePage calls it. It no longer fabricates a user.
+   * With DEV_AUTH_BYPASS on, every request is already authenticated, so this
+   * just re-reads the session. With it off there is nothing honest to do.
+   */
+  const loginAsDemo = useCallback(async () => {
+    if (!devBypassActive) {
+      throw new Error(
+        'Demo login is unavailable. Enable DEV_AUTH_BYPASS on the backend, or sign in with a phone number.',
+      );
+    }
+    return refresh();
+  }, [devBypassActive, refresh]);
+
+  /**
+   * safeHouse is a VIEW of the real base location, not a separate concept.
+   * Null when the user has not set one — deliberately not defaulted to
+   * Mangalore, because silently answering for a port the user never chose is
+   * the same class of error as the PFZ coverage gap. Callers must handle null.
+   */
+  const safeHouse = useMemo(() => {
+    if (!user?.baseLocation) return null;
+    return {
+      lat: user.baseLocation.lat,
+      lon: user.baseLocation.lon,
+      label: user.baseLocation.label || 'Home port',
     };
-    setToken('demo-token');
-    localStorage.setItem('orca_auth_token', 'demo-token');
-    setUser(demoUser);
-    return demoUser;
-  };
+  }, [user]);
 
-  const requestOtp = async (phone) => {
-    try {
-      const res = await fetch(`${AUTH_API_BASE}/api/v1/auth/request-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      return await res.json();
-    } catch (err) {
-      console.error('Request OTP failed', err);
-      return { status: 'otp_sent', dev_otp: '123456', message: 'Offline dev mode' };
-    }
-  };
-
-  const verifyOtp = async (phone, otp) => {
-    try {
-      const res = await fetch(`${AUTH_API_BASE}/api/v1/auth/verify-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
-        credentials: 'include',
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'OTP verification failed');
-      }
-
-      const data = await res.json();
-      setToken(data.token);
-      localStorage.setItem('orca_auth_token', data.token);
-      setUser(data.user);
-      return data;
-    } catch (err) {
-      // Fallback dev login
-      if (otp === '123456') {
-        const isDemo = phone.includes('98450') || phone.includes('12345');
-        const fallbackUser = {
-          id: isDemo ? 'demo-user-1' : `dev-user-${Date.now()}`,
-          phone,
-          name: isDemo ? 'Captain Ramanath K.' : '',
-          safe_house: DEFAULT_SAFE_HOUSE,
-          safe_route: DEFAULT_SAFE_ROUTE,
-          aadhaar: '',
-          preferred_language: localStorage.getItem('orca_language') || 'en',
-          onboarding_completed: isDemo,
-        };
-        setUser(fallbackUser);
-        setToken(fallbackUser.id);
-        localStorage.setItem('orca_auth_token', fallbackUser.id);
-        return { 
-          status: 'authenticated', 
-          token: fallbackUser.id, 
-          is_new_user: !fallbackUser.onboarding_completed, 
-          user: fallbackUser 
-        };
-      }
-      throw err;
-    }
-  };
-
-  const updateProfile = async (updates) => {
-    if (token && token !== 'dev-token') {
-      try {
-        const res = await fetch(`${AUTH_API_BASE}/api/v1/profile`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updates),
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data.user);
-          return data.user;
-        }
-      } catch (err) {
-        console.error('Failed to update profile on backend', err);
-      }
-    }
-
-    // Local update
-    setUser(prev => ({
-      ...prev,
-      ...updates,
-      safe_house: updates.safe_house || prev?.safe_house || DEFAULT_SAFE_HOUSE,
-      safe_route: updates.safe_route || prev?.safe_route || DEFAULT_SAFE_ROUTE,
-    }));
-  };
-
-  const logout = async () => {
-    try {
-      await fetch(`${AUTH_API_BASE}/api/v1/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-    } catch {}
-    setToken('');
-    localStorage.removeItem('orca_auth_token');
-    setUser(null);
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{
-        token,
-        user,
-        loading,
-        isAuthenticated: !!user,
-        requestOtp,
-        verifyOtp,
-        loginAsDemo,
-        updateProfile,
-        logout,
-        safeHouse: user?.safe_house || DEFAULT_SAFE_HOUSE,
-        safeRoute: user?.safe_route || DEFAULT_SAFE_ROUTE,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      status,
+      loading: status === AUTH_STATUS.LOADING,
+      isAuthenticated: status === AUTH_STATUS.AUTHENTICATED,
+      isBackendUnreachable: status === AUTH_STATUS.UNREACHABLE,
+      backendError,
+      devBypassActive,
+      appEnv,
+      user,
+      safeHouse,
+      safeRoute,
+      setSafeRoute,
+      refresh,
+      logout,
+      updateProfile,
+      setBaseLocation,
+      deleteBaseLocation,
+      loginAsDemo,
+    }),
+    [status, backendError, devBypassActive, appEnv, user, safeHouse, safeRoute,
+     setSafeRoute, refresh, logout, updateProfile, setBaseLocation, deleteBaseLocation, loginAsDemo],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
