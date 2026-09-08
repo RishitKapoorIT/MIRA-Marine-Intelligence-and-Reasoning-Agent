@@ -57,7 +57,12 @@ export function LocationProvider({ children }) {
   const [currentLocation, setCurrentLocation] = useState(() => {
     const saved = localStorage.getItem('orca_current_location');
     if (saved) {
-      try { return JSON.parse(saved); } catch {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.name && !/\b(to me|connecting road|unnamed|road not having)\b/i.test(parsed.name)) {
+          return parsed;
+        }
+      } catch {}
     }
     return KNOWN_COASTAL_LOCATIONS.find(l => l.key === 'mangalore');
   });
@@ -76,8 +81,8 @@ export function LocationProvider({ children }) {
     if (!text || typeof text !== 'string') return null;
     const lower = text.toLowerCase();
 
-    // 1. Check for user-centric location terms like "my area", "here", "local", "my port", "home harbor"
-    if (/\b(my area|my place|my harbor|my port|my location|my safe house|here|local|around me|home harbor)\b/i.test(lower)) {
+    // 1. Check for user-centric or conversational phrases that refer to current context
+    if (/\b(safe house|save house|safe area|my house|home harbor|my port|home port|my area|my place|my location|my region|my sector|here|local|around me|nearest port|closest port|what is my|name of it|where am i|which waters)\b/i.test(lower)) {
       return currentLocation;
     }
 
@@ -90,41 +95,49 @@ export function LocationProvider({ children }) {
       }
     }
 
-    // 3. Extract potential city/place keyword (e.g. "near Odisha", "in Goa", "around Mumbai", "area is Odisha")
-    const match = lower.match(/(?:near|around|at|in|to|off|basin|harbor|port|area is|place is|for)\s+([a-zA-Z\s]{3,25})/i);
-    const searchTarget = match ? match[1].trim() : text.trim();
+    // 3. Extract potential city/place keyword (e.g. "near Odisha", "in Goa", "around Mumbai")
+    const match = lower.match(/(?:near|around|at|in|off|basin|harbor|port|visiting)\s+([a-zA-Z\s]{4,25})/i);
+    const candidate = match ? match[1].trim() : '';
 
-    for (const loc of KNOWN_COASTAL_LOCATIONS) {
-      if (loc.key.toLowerCase() === searchTarget.toLowerCase() || searchTarget.toLowerCase().includes(loc.key)) {
-        setCurrentLocation(loc);
-        return loc;
-      }
-    }
-
-    try {
-      const url = `${NOMINATIM_URL}?format=json&q=${encodeURIComponent(searchTarget)}&limit=1&countrycodes=in`;
-      const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_UA } });
-      if (res.ok) {
-        const results = await res.json();
-        if (results && results.length > 0) {
-          const item = results[0];
-          const lat = parseFloat(item.lat);
-          const lon = parseFloat(item.lon);
-          const name = item.display_name.split(',')[0];
-          const resolved = {
-            key: name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-            name: `${name} Marine Waters`,
-            lat,
-            lon,
-            region: 'Indian EEZ',
-            sector: getSectorForLatLon(lat, lon),
-          };
-          setCurrentLocation(resolved);
-          return resolved;
+    if (candidate) {
+      for (const loc of KNOWN_COASTAL_LOCATIONS) {
+        if (loc.key.toLowerCase() === candidate.toLowerCase() || candidate.toLowerCase().includes(loc.key)) {
+          setCurrentLocation(loc);
+          return loc;
         }
       }
-    } catch (err) {
-      console.warn('Geocoding query fallback failed:', err);
+
+      // Filter out conversational stop words from Nominatim
+      const STOP_WORDS = new Set(['me', 'it', 'in', 'to', 'for', 'at', 'near', 'around', 'area', 'place', 'name', 'house', 'port', 'fishing', 'fish', 'route', 'weather', 'safe', 'save', 'what', 'where', 'how', 'when', 'who', 'is', 'my', 'the', 'of', 'and']);
+      if (!STOP_WORDS.has(candidate.toLowerCase()) && candidate.length >= 4) {
+        try {
+          const url = `${NOMINATIM_URL}?format=json&q=${encodeURIComponent(candidate)}&limit=1&countrycodes=in`;
+          const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_UA } });
+          if (res.ok) {
+            const results = await res.json();
+            if (results && results.length > 0) {
+              const item = results[0];
+              const lat = parseFloat(item.lat);
+              const lon = parseFloat(item.lon);
+              const displayName = item.display_name.split(',')[0].trim();
+              if (displayName.length > 2 && displayName.length < 30 && !displayName.includes('road')) {
+                const resolved = {
+                  key: displayName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                  name: `${displayName} Coastal Waters`,
+                  lat,
+                  lon,
+                  region: 'Indian EEZ',
+                  sector: getSectorForLatLon(lat, lon),
+                };
+                setCurrentLocation(resolved);
+                return resolved;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Geocoding query fallback failed:', err);
+        }
+      }
     }
 
     return null;
