@@ -38,7 +38,7 @@ export default function MapsPage() {
 
         {/* Map column */}
         <div className="flex flex-col flex-1 overflow-hidden relative">
-          <MapHeaderStrip layers={layers} />
+          <MapHeaderStrip />
 
           {loading ? (
             <div className="flex-1 flex items-center justify-center text-orca-muted text-sm">
@@ -58,11 +58,7 @@ export default function MapsPage() {
       </div>
 
       {/* Bottom tab bar */}
-      <BottomTabBar
-        layers={layers}
-        toggleLayer={toggleLayer}
-        hazardCount={hazardCount}
-      />
+      <BottomTabBar hazardCount={hazardCount} />
     </div>
   );
 }

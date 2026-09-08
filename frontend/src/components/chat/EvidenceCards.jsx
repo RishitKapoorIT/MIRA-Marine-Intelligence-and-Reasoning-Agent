@@ -1,13 +1,17 @@
-import React from 'react';
-import { Thermometer, Leaf, Waves, Mountain, CheckCircle2, ChevronRight, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Thermometer, Leaf, Waves, Mountain, CheckCircle2, ChevronRight, ShieldCheck, ChevronDown, ChevronUp, Compass, Map } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Frame 05: Evidence & Reasoning View.
- * Displays 2x2 telemetry evidence cards and a dynamically generated 3-step logical reasoning trace (FR-G1/FR-B5).
+ * Displays 2x2 telemetry evidence cards with concise plain sentences by default,
+ * standardized badges ("Good catch chance" / "Moderate" / "Low"), and click-to-expand details (Part B).
  */
 export default function EvidenceCards({ zone, weather }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
+  const [showFullDetails, setShowFullDetails] = useState(false);
 
   if (!zone) return null;
 
@@ -16,6 +20,16 @@ export default function EvidenceCards({ zone, weather }) {
   const waveHeight = weather?.waveHeight ?? 0.9;
   const windSpeed = weather?.windSpeed ?? 12;
 
+  // Badge Standardization (Part B)
+  const gradeKey = zone.predictedZone === 'BEST' ? 'best' : zone.predictedZone === 'GOOD' ? 'good' : 'poor';
+  const badgeLabel = t(`badges.${gradeKey}`);
+  const badgeColor =
+    zone.predictedZone === 'BEST'
+      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+      : zone.predictedZone === 'GOOD'
+      ? 'bg-[#00D8FF]/20 text-[#00D8FF] border-[#00D8FF]/30'
+      : 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+
   const evidenceCards = [
     {
       id: 'sst',
@@ -23,7 +37,8 @@ export default function EvidenceCards({ zone, weather }) {
       source: 'MODIS Thermal',
       recency: '2h ago',
       value: `${temp}°C`,
-      interpretation: `Frontal temperature gradient detected at ${temp}°C, creating favorable thermocline conditions for pelagic aggregation.`,
+      concise: `Optimal thermal gradient at ${temp}°C attracts pelagic schools.`,
+      fullDetail: `Frontal temperature gradient detected at ${temp}°C, creating favorable thermocline boundary conditions for schooling pelagics.`,
       icon: Thermometer,
       iconColor: 'text-amber-400',
       bgColor: 'bg-amber-500/10',
@@ -31,11 +46,12 @@ export default function EvidenceCards({ zone, weather }) {
     },
     {
       id: 'chl',
-      title: 'Chlorophyll-a Density',
+      title: 'Chlorophyll-a Bloom',
       source: 'MODIS Ocean Color',
       recency: '2h ago',
       value: `${chl} mg/m³`,
-      interpretation: `High phytoplankton concentration (${chl} mg/m³) provides rich forage base for primary marine food chains.`,
+      concise: `Plentiful phytoplankton forage base (${chl} mg/m³).`,
+      fullDetail: `High ocean color phytoplankton density (${chl} mg/m³) provides rich foraging for sardines and mackerel.`,
       icon: Leaf,
       iconColor: 'text-emerald-400',
       bgColor: 'bg-emerald-500/10',
@@ -47,7 +63,8 @@ export default function EvidenceCards({ zone, weather }) {
       source: 'Open-Meteo Marine',
       recency: 'Live Feed',
       value: `${waveHeight}m Swell · ${windSpeed}kt`,
-      interpretation: `Wave swell of ${waveHeight}m is well beneath the 1.5m safety limit, ensuring calm transit for motorized craft.`,
+      concise: `Calm seas (${waveHeight}m) — safe for motorized craft.`,
+      fullDetail: `Wave swell of ${waveHeight}m is well beneath the 1.5m safety threshold with steady ${windSpeed}kt surface winds.`,
       icon: Waves,
       iconColor: 'text-cyan-400',
       bgColor: 'bg-cyan-500/10',
@@ -57,9 +74,10 @@ export default function EvidenceCards({ zone, weather }) {
       id: 'bathy',
       title: 'Bathymetry & Depth Contour',
       source: 'GEBCO Marine Grid',
-      recency: 'Static (Sample)',
+      recency: 'Baseline',
       value: '45m Depth Ridge',
-      interpretation: 'Continental shelf drop-off fosters nutrient upwelling along the seafloor ridge (static baseline data).',
+      concise: 'Shelf ridge creates natural nutrient upwelling.',
+      fullDetail: 'Continental shelf break at 45m depth contour forces nutrient-rich currents toward sunlit surface layers.',
       icon: Mountain,
       iconColor: 'text-purple-400',
       bgColor: 'bg-purple-500/10',
@@ -68,22 +86,24 @@ export default function EvidenceCards({ zone, weather }) {
   ];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-4 max-w-3xl">
       {/* ── Recommendation Header ── */}
-      <div className="bg-orca-surface-2 border border-orca-teal/40 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-orca-teal/10">
+      <div className="bg-orca-surface-2 border border-orca-teal/40 rounded-2xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg shadow-orca-teal/10">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs uppercase tracking-wider text-orca-teal font-bold">
-              Recommended Fishing Zone
+              Recommended Zone
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
-              {zone.confidence}% Confidence
+            <span className={`px-2.5 py-0.5 rounded-full border text-xs font-bold ${badgeColor}`}>
+              {badgeLabel}
             </span>
-            <span className="px-2 py-0.5 rounded-full bg-orca-teal/20 text-orca-teal border border-orca-teal/30 text-xs font-bold">
-              Grade: {zone.predictedZone}
-            </span>
+            {zone.sector && (
+              <span className="px-2 py-0.5 rounded-full bg-orca-surface border border-orca-border text-[11px] font-bold text-white">
+                {zone.sector}
+              </span>
+            )}
           </div>
-          <h3 className="text-2xl font-extrabold text-white tracking-tight">
+          <h3 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
             {zone.id} · {zone.expectedSpecies}
           </h3>
           <p className="text-orca-muted text-xs mt-1">
@@ -94,102 +114,76 @@ export default function EvidenceCards({ zone, weather }) {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => navigate('/maps')}
-            className="
-              flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
-              bg-orca-teal text-orca-bg hover:bg-orca-teal/90 active:scale-[0.98]
-              transition-all duration-150 shadow-md shadow-orca-teal/20
-            "
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-orca-surface hover:bg-orca-surface-2 text-white border border-orca-border transition-all"
           >
-            <span>View on Map</span>
-            <ChevronRight size={14} />
+            <Map size={14} />
+            <span>{t('chat.view_map')}</span>
           </button>
           <button
-            onClick={() => navigate(`/route?dest=${zone.id}&lat=${zone.lat}&lon=${zone.lon}`)}
-            className="
-              flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold
-              bg-orca-surface border border-orca-border text-white hover:bg-orca-surface-2
-              transition-all duration-150
-            "
+            onClick={() => navigate(`/route?dest=${encodeURIComponent(zone.id)}&lat=${zone.lat}&lon=${zone.lon}`)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-orca-teal text-orca-bg hover:bg-orca-teal/90 shadow-md transition-all"
           >
-            Plot Route
+            <Compass size={14} />
+            <span>{t('chat.plot_route')}</span>
           </button>
         </div>
       </div>
 
-      {/* ── 2x2 Telemetry Evidence Grid ── */}
-      <div>
-        <h4 className="text-xs uppercase tracking-wider font-bold text-orca-muted mb-3 flex items-center gap-2">
-          <span>Satellite & Telemetry Evidence</span>
-          <span className="text-[10px] lowercase font-normal text-orca-muted/70">(4 verified layers)</span>
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {evidenceCards.map(c => {
-            const Icon = c.icon;
-            return (
-              <div
-                key={c.id}
-                className={`p-4 rounded-xl border ${c.borderColor} bg-orca-surface flex flex-col justify-between hover:border-orca-teal/30 transition-colors`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] font-semibold text-white flex items-center gap-1.5">
-                      <Icon size={14} className={c.iconColor} />
-                      {c.title}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-orca-bg border border-orca-border text-orca-muted font-mono">
-                      {c.recency}
-                    </span>
+      {/* ── 2x2 Satellite Evidence Grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {evidenceCards.map(card => {
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.id}
+              className={`p-3.5 rounded-xl border ${card.bgColor} ${card.borderColor} flex flex-col justify-between space-y-2`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg bg-orca-bg/60 ${card.iconColor}`}>
+                    <Icon size={16} />
                   </div>
-                  <div className="text-xl font-extrabold text-white tracking-tight my-1">
-                    {c.value}
-                  </div>
-                  <p className="text-[11px] text-orca-muted leading-relaxed">
-                    {c.interpretation}
-                  </p>
+                  <span className="text-xs font-bold text-white">{card.title}</span>
                 </div>
-                <div className="mt-3 pt-2 border-t border-orca-border/50 text-[10px] text-orca-muted/70 flex items-center justify-between">
-                  <span>Source: {c.source}</span>
-                  <span className="text-emerald-400 font-medium">Validated</span>
-                </div>
+                <span className="text-[10px] text-orca-muted">{card.source}</span>
               </div>
-            );
-          })}
-        </div>
+
+              <div>
+                <div className="text-base font-extrabold text-white font-mono">{card.value}</div>
+                <p className="text-xs text-orca-muted mt-1 leading-snug">
+                  {showFullDetails ? card.fullDetail : card.concise}
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* ── Logical Reasoning Chain ── */}
-      <div className="bg-orca-surface border border-orca-border rounded-xl p-5 space-y-3">
-        <h4 className="text-xs uppercase tracking-wider font-bold text-white flex items-center gap-2">
-          <ShieldCheck size={14} className="text-orca-teal" />
-          <span>Logical Reasoning Chain (Explainability Trace)</span>
-        </h4>
-        <div className="space-y-2.5 text-xs text-orca-muted leading-relaxed">
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-orca-teal/15 text-orca-teal font-bold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5 border border-orca-teal/30">
-              1
-            </span>
-            <p>
-              <strong className="text-white">Frontal Boundary Detection:</strong> MODIS thermal telemetry detected an SST frontal boundary near <strong className="text-orca-teal">{temp}°C</strong>, providing continuous upwelling necessary for baitfish aggregation.
-            </p>
-          </div>
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-orca-teal/15 text-orca-teal font-bold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5 border border-orca-teal/30">
-              2
-            </span>
-            <p>
-              <strong className="text-white">Primary Productivity Verification:</strong> Chlorophyll-a density of <strong className="text-orca-teal">{chl} mg/m³</strong> confirms elevated phytoplankton bloom density, correlating with high pelagic catch probability.
-            </p>
-          </div>
-          <div className="flex items-start gap-2.5">
-            <span className="w-5 h-5 rounded-full bg-orca-teal/15 text-orca-teal font-bold text-[11px] flex items-center justify-center flex-shrink-0 mt-0.5 border border-orca-teal/30">
-              3
-            </span>
-            <p>
-              <strong className="text-white">Safety Clearance:</strong> Real-time Open-Meteo marine telemetry confirms safe wave swell of <strong className="text-cyan-400">{waveHeight}m</strong> and <strong className="text-cyan-400">{windSpeed} kt</strong> wind, safely within operational safety thresholds (&lt;1.5m).
-            </p>
+      {/* ── Toggle Details & Scientific Trace ── */}
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setShowFullDetails(!showFullDetails)}
+          className="text-xs text-orca-teal flex items-center gap-1 hover:underline font-semibold"
+        >
+          <span>{showFullDetails ? t('chat.hide_details') : t('chat.details')}</span>
+          {showFullDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+
+      {showFullDetails && (
+        <div className="p-3.5 rounded-xl bg-orca-surface border border-orca-border space-y-2 text-xs text-orca-muted animate-fadeIn">
+          <span className="text-white font-bold block text-[11px] uppercase tracking-wider">
+            Scientific Reasoning Chain & Feature Provenance
+          </span>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <div>• Model Confidence: <strong className="text-white">{zone.confidence}%</strong></div>
+            <div>• Raw ML Class: <strong className="text-white">{zone.predictedZone}</strong></div>
+            <div>• Frontal Thermocline: <strong className="text-white">{temp}°C</strong></div>
+            <div>• Chlorophyll Density: <strong className="text-white">{chl} mg/m³</strong></div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
