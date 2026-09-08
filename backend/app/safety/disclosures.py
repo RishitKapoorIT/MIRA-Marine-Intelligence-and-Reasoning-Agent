@@ -23,6 +23,7 @@ class DisclosureKey(str, Enum):
     NOT_OFFICIAL_WARNING = "disclosure.not_official_warning"
     PFZ_NOT_CERTIFIED = "disclosure.pfz_not_certified"
     PFZ_NOT_VALIDATED = "disclosure.pfz_not_validated"
+    PFZ_PARTIAL_COVERAGE = "disclosure.pfz_partial_coverage"
     FORECAST_NOT_OBSERVATION = "disclosure.forecast_not_observation"
     DATA_STALE = "disclosure.data_stale"
     SOURCE_UNAVAILABLE = "disclosure.source_unavailable"
@@ -47,6 +48,11 @@ DISCLOSURE_TEXT: dict[DisclosureKey, str] = {
     DisclosureKey.PFZ_NOT_VALIDATED: (
         "The accuracy of these zones has not been formally validated against "
         "independent reference data."
+    ),
+    DisclosureKey.PFZ_PARTIAL_COVERAGE: (
+        "The most recent fishing-zone analysis did not cover the whole coast. "
+        "Areas it did not reach show no zones because none were computed "
+        "there, not because none exist."
     ),
     DisclosureKey.FORECAST_NOT_OBSERVATION: (
         "These values are forecasts, not measurements. Conditions at sea can "
@@ -96,6 +102,7 @@ def for_answer(
     missing_inputs: list[str] | None = None,
     alerts_feed_available: bool = True,
     includes_pfz: bool = False,
+    pfz_partial_coverage: bool = False,
     includes_forecast: bool = False,
     any_stale: bool = False,
 ) -> list[Disclosure]:
@@ -114,6 +121,8 @@ def for_answer(
     if includes_pfz:
         keys.append(DisclosureKey.PFZ_NOT_CERTIFIED)
         keys.append(DisclosureKey.PFZ_NOT_VALIDATED)
+        if pfz_partial_coverage:
+            keys.append(DisclosureKey.PFZ_PARTIAL_COVERAGE)
 
     # FR-I3 — a forecast must never read as a measurement.
     if includes_forecast:

@@ -117,14 +117,13 @@ class User(Base, TimestampMixin):
     # FR-H7.1: seeded Karnataka demo accounts, so judging needs no live onboarding.
     is_demo: Mapped[bool] = mapped_column(server_default=text("false"), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
     # FR-H2.2 explicit-logout revocation. Firebase's own session-cookie
     # mechanism caps expiresIn at 14 days, short of the signed-off 30-day
     # requirement, so app/core/security.py issues its own signed token and
     # uses this column to make logout an actual server-side revocation
     # rather than a client-side-only cookie clear.
     session_revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    
+
     conversations: Mapped[list[Conversation]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -403,6 +402,12 @@ class PfzGeneration(Base):
     thresholds_snapshot: Mapped[dict | None] = mapped_column(JSONB)
 
     points_evaluated: Mapped[int | None] = mapped_column(Integer)
+    # WHERE the run actually got data, not just how much. A partial run
+    # produces a spatially contiguous gap (chunks are row-major slices of the
+    # grid), so coverage_fraction alone would let a generation missing most of
+    # the coast look merely "70% complete" instead of "silent north of 13N".
+    # List of coarse cell keys; see workers/pfz_features.coverage_cell_key.
+    covered_cells: Mapped[list | None] = mapped_column(JSONB)
     # FR-E1.9 / FR-E1.15: coverage decides whether an empty result means
     # "nothing qualified" or "we could not see enough of the ocean".
     coverage_fraction: Mapped[float | None] = mapped_column(Float)

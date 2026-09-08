@@ -40,6 +40,20 @@ async def run(state) -> AgentOutput:
             missing_inputs=["PFZ product not yet computed"],
         )
 
+    if result.status == "not_covered":
+        # FR-E1.9 in spirit: "we did not look here" must never be delivered as
+        # "there is nothing here".
+        return AgentOutput(
+            agent_name="ocean_agent",
+            summary=(
+                "The most recent fishing-zone analysis did not cover this area, "
+                "so no zones were computed for it. This is not a finding that "
+                "there are no zones nearby."
+            ),
+            findings={"status": "not_covered", "partial_coverage": True},
+            missing_inputs=["PFZ analysis did not cover this location"],
+        )
+
     if result.status == "empty":
         # FR-E1.9 — the two causes read very differently to a fisherman.
         if result.empty_reason == "insufficient_coverage":

@@ -77,6 +77,8 @@ async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
         generation.points_evaluated = batch.points_requested
         generation.coverage_fraction = round(batch.coverage_fraction, 4)
         generation.observation_date = batch.observation_date
+        # WHERE we got data, not just how much (see models.PfzGeneration).
+        generation.covered_cells = batch.covered_cells()
 
         if not batch.points:
             raise RuntimeError(
@@ -115,6 +117,7 @@ async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
             "points_requested": batch.points_requested,
             "points_with_data": batch.points_with_data,
             "coverage_fraction": round(batch.coverage_fraction, 4),
+            "covered_cells": len(batch.covered_cells()),
             "predictions": len(predictions),
             "qualifying_points": derived.qualifying_points,
             "clusters_found": derived.clusters_found,

@@ -76,6 +76,8 @@ async def resolve_context(state: OrcaState) -> dict:
         live_gps=state.get("_live_gps"),
     )
 
+    from app.agents.orchestrator.streaming import emit
+
     if location is None:
         return {
             "location": None,
@@ -88,14 +90,38 @@ async def resolve_context(state: OrcaState) -> dict:
         }
 
     window = geo_tool.resolve_window(relative=state.get("_relative_time"))
+    await emit(
+        state,
+        "context_resolved",
+        {
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+            "resolution_route": location.route.value,
+            "label": location.label,
+            "window": window.description,
+            "window_assumed": window.assumed,
+        },
+    )
     return {"location": location, "window": window}
 
 
 async def plan_node(state: OrcaState) -> dict:
     if state.get("clarification_needed"):
         return {}
+    from app.agents.orchestrator.streaming import emit
+
     location = state.get("location")
     plan = await build_plan(state["query_text"], location.label if location else None)
+    # FR-B1.1 - the plan is visible before any specialist runs.
+    await emit(
+        state,
+        "plan",
+        {
+            "interpretation": plan.interpretation,
+            "steps": [{"agent": s.agent_name, "reason": s.reason} for s in plan.steps],
+            "needs_clarification": plan.needs_clarification,
+        },
+    )
     return {"plan": plan}
 
 
@@ -161,6 +187,21 @@ async def compute_verdict(state: OrcaState) -> dict:
     result = verdict_module.evaluate(
         marine_env, weather_env, alerts, alerts_feed_available=feed_available
     )
+    from app.agents.orchestrator.streaming import emit
+
+    await emit(
+        state,
+        "verdict",
+        {
+            "verdict": result.verdict.value,
+            "capped_by_missing_input": result.capped_by_missing_input,
+            "missing_inputs": result.missing_inputs,
+            "reasons": [
+                {"factor": r.factor, "detail": r.detail, "source": r.source_id}
+                for r in result.reasons
+            ],
+        },
+    )
     return {"verdict": result, "_alerts": alerts, "_feed_available": feed_available}
 
 
@@ -187,7 +228,8 @@ async def synthesize(state: OrcaState) -> dict:
             "status": TurnStatus.CLARIFICATION_REQUESTED.value,
         }
 
-    from app.agents.llm import call_text
+    from app.agents.llm import call_text, call_text_stream
+    from app.agents.orchestrator.streaming import emit
 
     outputs = state.get("agent_outputs", {})
     missing = sorted({m for o in outputs.values() for m in o.missing_inputs})
@@ -206,20 +248,36 @@ async def synthesize(state: OrcaState) -> dict:
         else "No safety verdict."
     )
 
-    answer, error = await call_text(
-        SYNTHESIS_SYSTEM,
+    prompt = (
         f"User question: {state['query_text']}\n\n{verdict_text}\n\n"
         f"Specialist findings:\n{findings_text}\n\n"
-        f"Missing data: {missing or 'none'}",
-        max_tokens=700,
+        f"Missing data: {missing or 'none'}"
     )
 
-    if answer is None:
+    answer: str | None
+    if state.get("_events") is not None:
+        # Streamed turn: relay tokens as they arrive (NFR-P2).
+        answer = None
+        async for kind, payload in call_text_stream(
+            SYNTHESIS_SYSTEM, prompt, max_tokens=700
+        ):
+            if kind == "delta":
+                await emit(state, "answer_delta", {"text": payload})
+            elif kind == "done":
+                answer = payload
+            else:
+                answer = None
+    else:
+        answer, _error = await call_text(SYNTHESIS_SYSTEM, prompt, max_tokens=700)
+
+    if not answer:
         # FR-B4.3 — concatenated specialist summaries are a worse answer than
         # synthesised prose, but they are a truthful one.
         answer = " ".join(o.summary for o in outputs.values()) or (
             "I could not produce an answer for that."
         )
+        # The fallback text never reached the client as deltas, so send it.
+        await emit(state, "answer_fallback", {"text": answer})
 
     status = TurnStatus.PARTIAL.value if missing else TurnStatus.COMPLETE.value
     return {"answer_text": answer, "status": status, "missing_inputs": missing}
@@ -234,16 +292,40 @@ async def _run_agents(names: list[str], state: OrcaState, start_index: int):
     broken agent degrades the answer rather than losing it.
     """
 
+    from app.agents.orchestrator.streaming import emit
+
     async def _invoke(name: str):
         specialist = SPECIALISTS[name]
         started = time.perf_counter()
+        await emit(state, "agent_started", {"agent": name})
         try:
             output = await specialist.run(state)
+            await emit(
+                state,
+                "agent_completed",
+                {
+                    "agent": name,
+                    "status": InvocationStatus.OK.value,
+                    "summary": output.summary,
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                    "missing_inputs": output.missing_inputs,
+                },
+            )
             return name, output, InvocationStatus.OK, None, int(
                 (time.perf_counter() - started) * 1000
             )
         except Exception as exc:
             logger.exception("Specialist %s failed", name)
+            await emit(
+                state,
+                "agent_completed",
+                {
+                    "agent": name,
+                    "status": InvocationStatus.FAILED.value,
+                    "error": str(exc),
+                    "latency_ms": int((time.perf_counter() - started) * 1000),
+                },
+            )
             return name, None, InvocationStatus.FAILED, str(exc), int(
                 (time.perf_counter() - started) * 1000
             )

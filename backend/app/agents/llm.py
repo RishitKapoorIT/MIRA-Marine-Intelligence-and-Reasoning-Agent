@@ -104,6 +104,55 @@ async def call_json(
     return None, last_error
 
 
+async def call_text_stream(
+    system_prompt: str,
+    user_prompt: str,
+    *,
+    temperature: float = 0.2,
+    max_tokens: int = 1024,
+):
+    """Yield answer text as it is generated.
+
+    Used only by the synthesizer. Yields ("delta", chunk) for each token
+    group, then ("done", full_text) or ("error", message). The caller
+    accumulates the deltas, so a mid-stream failure still leaves whatever was
+    produced rather than losing the turn.
+    """
+    try:
+        stream = await get_client().chat.completions.create(
+            model=settings.groq_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+    except Exception as exc:
+        logger.warning("Groq stream failed to open: %s", exc)
+        yield "error", f"LLM call failed: {exc}"
+        return
+
+    parts: list[str] = []
+    try:
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                parts.append(delta)
+                yield "delta", delta
+    except Exception as exc:
+        logger.warning("Groq stream broke mid-response: %s", exc)
+        if parts:
+            # Partial prose beats no prose; the caller decides what to do.
+            yield "done", "".join(parts)
+        else:
+            yield "error", f"LLM stream failed: {exc}"
+        return
+
+    yield "done", "".join(parts)
+
+
 async def call_text(
     system_prompt: str,
     user_prompt: str,

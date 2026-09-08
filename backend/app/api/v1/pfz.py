@@ -1,67 +1,83 @@
-"""FR-E1 / FR-G5 — reads only from the batch-computed, atomically-published
-PFZ cache. Never derives zones live (FR-E1.2); the derivation pipeline
-(workers/pfz_features.py -> pfz_client.py -> pfz_derive.py -> pfz_batch.py)
-is Step 4/5.
+"""FR-E1 / FR-G5 PFZ endpoints.
+
+Reads only from the batch-computed, atomically-published cache; never derives
+zones live (FR-E1.2). The derivation pipeline is app/workers/pfz_*.
+
+STEP 5C: every query here now delegates to app/tools/pfz_tool. This module
+previously carried its own copy of the nearest-zones query, which meant the
+request path and the agent path could answer the same question differently -
+and after the coverage gate was added to pfz_tool, they would have.
 """
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, Query
-from geoalchemy2 import WKTElement
 from geoalchemy2.shape import to_shape
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.constants import SRID, GenerationStatus
 from app.core.security import get_current_user
 from app.core.thresholds import thresholds
-from app.db.models import PfzGeneration, PfzZone, User
+from app.db.models import User
 from app.db.session import get_session
+from app.safety.disclosures import for_answer
+from app.tools import pfz_tool
 
 router = APIRouter()
 
-# FR-I2.1 / FR-I2.2 — carried on every PFZ answer, not just the methodology page.
-PFZ_DISCLOSURES = [
-    "This zone is ORCA's own model derived from public satellite data "
-    "(NASA Ocean Color SST + chlorophyll-a), not an INCOIS-certified advisory.",
-    "Formal accuracy validation against independent reference data has not "
-    "been performed for this build.",
-]
+
+def _disclosures(partial_coverage: bool = False) -> list[dict]:
+    """FR-I2 — sourced from the single registry, not restated here."""
+    return [
+        d.__dict__
+        for d in for_answer(includes_pfz=True, pfz_partial_coverage=partial_coverage)
+    ]
+
+
+def _resolve_point(
+    lat: float | None, lon: float | None, current_user: User
+) -> tuple[float, float]:
+    if lat is not None and lon is not None:
+        return lat, lon
+    if current_user.base_location is None:
+        raise HTTPException(
+            status_code=400, detail="No lat/lon given and no base location on file."
+        )
+    point = to_shape(current_user.base_location)
+    return point.y, point.x
 
 
 @router.get("/methodology")
 async def get_methodology(db: AsyncSession = Depends(get_session)) -> dict:
     """FR-G5.1 — reachable from any PFZ answer."""
-    stmt = select(PfzGeneration).where(PfzGeneration.status == GenerationStatus.PUBLISHED)
-    generation = (await db.execute(stmt)).scalar_one_or_none()
+    generation = await pfz_tool.get_published_generation(db)
 
     return {
         "approach": (
-            "Sea surface temperature and chlorophyll-a are retrieved for a "
+            "Sea surface temperature and ocean currents are retrieved for a "
             "fixed coastal grid, classified by a trained XGBoost model into "
             "BEST / GOOD / POOR, then clustered into zone polygons. Zone "
             "count is an output of this process, never a target."
         ),
-        "inputs": [
-            "sea_surface_temperature",
-            "chlorophyll_a",
-            "ocean_currents",
-            "salinity (climatology constant)",
-        ],
+        "inputs": {
+            "sea_surface_temperature": "Open-Meteo Marine forecast",
+            "ocean_currents": "Open-Meteo Marine forecast",
+            "salinity": "regional climatology constant, not observed",
+            "chlorophyll": "not currently retrieved; passed to the model as a "
+            "missing feature rather than estimated",
+        },
         "min_zone_area_km2": thresholds.pfz.min_zone_area_km2,
-        "composite_window_days": thresholds.pfz.composite_days,
-        "refresh_cadence": (
-            "Daily granule-availability check; recomputed only when inputs change."
-        ),
+        "min_coverage_fraction": thresholds.pfz.min_coverage_fraction,
+        "grid_spacing_deg": thresholds.pfz.grid.spacing_deg,
+        "refresh_cadence": "Daily batch; recomputed only when inputs change.",
         "current_generation": (
             {
                 "observation_date": generation.observation_date,
                 "computed_at": generation.computed_at,
+                "coverage_fraction": generation.coverage_fraction,
+                "zone_count": generation.zone_count,
             }
             if generation
             else None
         ),
-        "disclosures": PFZ_DISCLOSURES,
+        "disclosures": _disclosures(),
     }
 
 
@@ -73,88 +89,39 @@ async def get_zones(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ) -> dict:
-    if lat is None or lon is None:
-        if current_user.base_location is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No lat/lon given and no base location on file.",
-            )
-        point = to_shape(current_user.base_location)
-        lat, lon = point.y, point.x
+    lat, lon = _resolve_point(lat, lon, current_user)
+    result = await pfz_tool.get_nearest_zones(db, lat, lon, limit=limit)
 
-    gen_stmt = select(PfzGeneration).where(PfzGeneration.status == GenerationStatus.PUBLISHED)
-    generation = (await db.execute(gen_stmt)).scalar_one_or_none()
+    base = {
+        "status": result.status,
+        "is_stale": result.is_stale,
+        "query_point": {"latitude": lat, "longitude": lon},
+        "methodology_url": "/api/v1/pfz/methodology",
+        "disclosures": _disclosures(result.partial_coverage),
+    }
 
-    if generation is None:
-        # FR-E1.15 — no known-good generation exists yet (the batch hasn't run).
-        return {
-            "status": "unavailable",
-            "message": "No PFZ product is available yet.",
-            "zones": [],
-            "disclosures": PFZ_DISCLOSURES,
-        }
+    if result.generation is not None:
+        base["observation_date"] = result.generation.observation_date
+        base["coverage_fraction"] = result.generation.coverage_fraction
 
-    is_stale = (
-        datetime.now(timezone.utc) - generation.computed_at
-    ).total_seconds() > thresholds.pfz.max_staleness_hours * 3600
+    # FR-E1.15 — no generation has ever published.
+    if result.status == "unavailable":
+        return {**base, "message": result.message, "zones": []}
 
-    if generation.zone_count == 0:
-        # FR-E1.8 / FR-E1.9 — plainly stated, and the two causes distinguished.
-        return {
-            "status": "empty",
-            "empty_reason": generation.empty_reason,
-            "observation_date": generation.observation_date,
-            "is_stale": is_stale,
-            "zones": [],
-            "disclosures": PFZ_DISCLOSURES,
-        }
+    # The run never reached this location. Distinct from "nothing qualified".
+    if result.status == "not_covered":
+        return {**base, "message": result.message, "zones": []}
 
-    center = WKTElement(f"POINT({lon} {lat})", srid=SRID)
-    distance_m = func.ST_Distance(PfzZone.centroid, center).label("distance_m")
-    bearing_rad = func.ST_Azimuth(center, PfzZone.centroid).label("bearing_rad")
-
-    zones_stmt = (
-        select(PfzZone, distance_m, bearing_rad)
-        .where(PfzZone.generation_id == generation.id)
-        .order_by(distance_m)
-        .limit(limit)
-    )
-    rows = (await db.execute(zones_stmt)).all()
-
-    def _out(zone: PfzZone, dist_m: float, bearing_rad_val: float) -> dict:
-        return {
-            "id": zone.id,
-            "zone_class": zone.zone_class,
-            "confidence": zone.confidence,
-            "area_km2": zone.area_km2,
-            "distance_km": round(dist_m / 1000, 2),
-            "bearing_deg": round((bearing_rad_val * 180 / 3.141592653589793) % 360, 1),
-            "geometry": to_shape(zone.geom).__geo_interface__,
-            "evidence": {
-                "sea_surface_temperature_c": zone.mean_sst_c,
-                "chlorophyll_mg_m3": zone.mean_chlorophyll_mg_m3,
-                "sst_gradient": zone.sst_gradient,
-                "salinity_psu": zone.salinity_psu,
-                "feature_provenance": zone.feature_provenance,
-                "observation_date": zone.observation_date,
-            },
-            "mpa_or_restricted": {
-                "intersects_mpa": zone.intersects_mpa,
-                "intersects_restricted": zone.intersects_restricted,
-                "distance_to_boundary_m": zone.distance_to_boundary_m,
-            },
-        }
+    # FR-E1.8 / FR-E1.9 — nothing qualified, and which of the two causes.
+    if result.status == "empty":
+        return {**base, "empty_reason": result.empty_reason, "zones": []}
 
     return {
-        "status": "ok",
-        "is_stale": is_stale,
-        "observation_date": generation.observation_date,
-        "zones": [_out(z, d, b) for z, d, b in rows],
-        "disclosures": PFZ_DISCLOSURES
-        + [
-            "This raw list is sorted by distance only. Ranking that also "
-            "weighs sea-state en route and hazard exposure happens in the "
-            "conversational query path (FR-E1.16)."
-        ],
-        "methodology_url": "/api/v1/pfz/methodology",
+        **base,
+        "zones": [pfz_tool.zone_evidence(hit) for hit in result.zones],
+        "ranking_note": (
+            "Sorted by distance only. Ranking that also weighs sea-state en "
+            "route and hazard exposure happens in the conversational query "
+            "path (FR-E1.16)."
+        ),
     }

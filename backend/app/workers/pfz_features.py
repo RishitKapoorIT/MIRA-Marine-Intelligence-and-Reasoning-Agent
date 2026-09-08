@@ -42,7 +42,16 @@ logger = logging.getLogger(__name__)
 # Open-Meteo accepts comma-separated coordinate lists. Kept well under URL
 # length limits; one grid run is a handful of requests rather than thousands.
 COORDS_PER_REQUEST = 100
-MAX_CONCURRENT_REQUESTS = 3
+# Serial, not concurrent. Open-Meteo's free tier bills by locations x
+# variables, so a 3000-point grid burns quota fast, and firing chunks in
+# parallel is what triggers 429s. A partial PFZ product is far more dangerous
+# than a slow one, so this run is deliberately unhurried.
+MAX_CONCURRENT_REQUESTS = 1
+DELAY_BETWEEN_REQUESTS_SECONDS = 1.5
+
+# Resolution at which coverage is recorded. Coarse enough to stay compact in
+# JSONB, fine enough to answer "did we compute anything near this port?".
+COVERAGE_CELL_DEG = 0.5
 
 MARINE_VARS = [
     "sea_surface_temperature",
@@ -71,6 +80,13 @@ class FeaturePoint:
     observation_time: datetime | None = None
 
 
+def coverage_cell_key(latitude: float, longitude: float) -> str:
+    """Coarse cell identifier used to record WHERE a run got data."""
+    lat_cell = math.floor(latitude / COVERAGE_CELL_DEG) * COVERAGE_CELL_DEG
+    lon_cell = math.floor(longitude / COVERAGE_CELL_DEG) * COVERAGE_CELL_DEG
+    return f"{lat_cell:.1f},{lon_cell:.1f}"
+
+
 @dataclass
 class FeatureBatch:
     points: list[FeaturePoint] = field(default_factory=list)
@@ -84,6 +100,18 @@ class FeatureBatch:
         if self.points_requested == 0:
             return 0.0
         return self.points_with_data / self.points_requested
+
+    def covered_cells(self) -> list[str]:
+        """Cells where at least one point returned data.
+
+        coverage_fraction says how much; this says where. Without it a run
+        that silently lost everything north of 13N looks like a merely
+        incomplete product rather than one that cannot answer for half its
+        service area.
+        """
+        return sorted(
+            {coverage_cell_key(p.latitude, p.longitude) for p in self.points}
+        )
 
     def provenance(self) -> dict:
         """FR-G1.1 / FR-C6.1 - per-feature source and honesty about the gaps."""
@@ -171,6 +199,7 @@ async def _fetch_chunk(
     chunk: list[GridPoint], target: datetime, semaphore: asyncio.Semaphore
 ) -> tuple[list[FeaturePoint], list[str], datetime | None]:
     async with semaphore:
+        await asyncio.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
         payload, error = await fetch_json(
             settings.open_meteo_marine_url,
             {
@@ -259,10 +288,22 @@ async def build_features(target: datetime | None = None) -> FeatureBatch:
     batch.points_with_data = len(batch.points)
     batch.observation_date = latest.date() if latest else None
 
+    cells = batch.covered_cells()
     logger.info(
-        "PFZ features: %d/%d points with data (coverage %.1f%%)",
+        "PFZ features: %d/%d points with data (coverage %.1f%%) across %d cells",
         batch.points_with_data,
         batch.points_requested,
         batch.coverage_fraction * 100,
+        len(cells),
     )
+    if batch.errors:
+        covered_lats = [float(c.split(",")[0]) for c in cells] or [0.0]
+        logger.warning(
+            "%d chunk(s) failed. Data covers latitude %.1f..%.1f only; "
+            "locations outside that band will report no coverage rather than "
+            "an empty result.",
+            len(batch.errors),
+            min(covered_lats),
+            max(covered_lats) + COVERAGE_CELL_DEG,
+        )
     return batch

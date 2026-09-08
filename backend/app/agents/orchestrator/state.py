@@ -47,6 +47,9 @@ class OrcaState(TypedDict, total=False):
     _relative_time: str | None
     _alerts: list[Any]
     _feed_available: bool
+    # asyncio.Queue when the turn is streamed; absent otherwise. Progress
+    # emission is a no-op without it, so one graph serves both endpoints.
+    _events: Any
 
     # --- Input ---
     user_id: uuid.UUID

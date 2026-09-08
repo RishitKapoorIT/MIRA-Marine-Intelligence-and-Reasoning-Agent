@@ -35,16 +35,40 @@ class ZoneHit:
 
 @dataclass
 class PfzReadResult:
-    """FR-E1.8 / FR-E1.9 — 'no product exists', 'nothing qualified' and
-    'we could not see enough ocean' are three different answers, and the
-    caller must be able to tell them apart. A bare empty list cannot."""
+    """FR-E1.8 / FR-E1.9 — 'no product exists', 'nothing qualified', 'we could
+    not see enough ocean' and 'we never computed anything near you' are four
+    different answers, and the caller must be able to tell them apart. A bare
+    empty list cannot."""
 
-    status: str  # "ok" | "empty" | "unavailable"
+    status: str  # "ok" | "empty" | "unavailable" | "not_covered"
     zones: list[ZoneHit]
     generation: PfzGeneration | None = None
     empty_reason: str | None = None
     is_stale: bool = False
     message: str | None = None
+    # True when the generation holds zones, but none for this location's area.
+    partial_coverage: bool = False
+
+
+def location_is_covered(generation: PfzGeneration, lat: float, lon: float) -> bool:
+    """Did the run that produced this generation get data near this point?
+
+    A generation whose northern chunks were rate-limited away holds real zones
+    for the south and nothing for the north. Without this check, a user in the
+    uncovered band is handed the nearest southern zone as though it were the
+    nearest zone to them, or an empty list that reads as "nothing biting" when
+    the truth is "we never looked".
+    """
+    cells = generation.covered_cells
+    if not cells:
+        # Older generations predate coverage recording. Treat as covered
+        # rather than blocking every read, but the caller still sees
+        # coverage_fraction.
+        return True
+
+    from app.workers.pfz_features import coverage_cell_key
+
+    return coverage_cell_key(lat, lon) in set(cells)
 
 
 async def get_published_generation(db: AsyncSession) -> PfzGeneration | None:
@@ -75,6 +99,22 @@ async def get_nearest_zones(
             status="unavailable",
             zones=[],
             message="No PFZ product has been published yet.",
+        )
+
+    # Checked BEFORE the empty case: "nothing qualified here" and "we never
+    # computed here" must never collapse into the same answer.
+    if not location_is_covered(generation, lat, lon):
+        return PfzReadResult(
+            status="not_covered",
+            zones=[],
+            generation=generation,
+            is_stale=_is_stale(generation),
+            partial_coverage=True,
+            message=(
+                "The most recent analysis did not cover your area, so no "
+                "fishing zones were computed for it. This is not a finding "
+                "that there are no zones near you."
+            ),
         )
 
     if generation.zone_count == 0:

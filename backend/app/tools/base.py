@@ -37,6 +37,9 @@ from app.db.models import SourceStatus
 DEFAULT_TIMEOUT_SECONDS = 15.0
 MAX_ATTEMPTS = 3
 BACKOFF_BASE_SECONDS = 0.5
+# 429 is retryable, unlike other 4xx: the request was valid, we simply sent it
+# too fast. It needs a much longer pause than a transient 5xx.
+RATE_LIMIT_BACKOFF_SECONDS = 8.0
 
 
 class DataKind(str, Enum):
@@ -106,13 +109,23 @@ async def fetch_json(
     the latency budget.
     """
     last_error: str | None = None
+    delay = BACKOFF_BASE_SECONDS
 
     for attempt in range(max_attempts):
+        delay = BACKOFF_BASE_SECONDS * (2**attempt)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.get(url, params=params)
 
-            if response.status_code >= 500:
+            if response.status_code == 429:
+                # Retryable, and the server may tell us how long to wait.
+                retry_after = response.headers.get("Retry-After", "")
+                if retry_after.isdigit():
+                    delay = float(retry_after)
+                else:
+                    delay = RATE_LIMIT_BACKOFF_SECONDS * (2**attempt)
+                last_error = f"HTTP 429 rate limited (backing off {delay:.0f}s)"
+            elif response.status_code >= 500:
                 last_error = f"HTTP {response.status_code} from upstream"
             elif response.status_code >= 400:
                 return None, f"HTTP {response.status_code}: {response.text[:200]}"
@@ -127,7 +140,7 @@ async def fetch_json(
             return None, f"Malformed JSON from upstream: {exc}"
 
         if attempt < max_attempts - 1:
-            await asyncio.sleep(BACKOFF_BASE_SECONDS * (2**attempt))
+            await asyncio.sleep(delay)
 
     return None, last_error
 
