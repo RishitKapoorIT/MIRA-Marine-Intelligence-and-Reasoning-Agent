@@ -90,7 +90,16 @@ def stubs():
 
 
 async def collect(consume_all=True, stop_after=None):
-    from app.agents.orchestrator.streaming import stream_turn
+    """Run one streamed turn.
+
+    The detached task outlives the generator by design, so the mock patches
+    must stay active until it finishes - otherwise it falls through to the
+    real Groq client and database and the assertion fails for the wrong
+    reason. wait_for_background_turns makes that deterministic instead of
+    relying on a sleep.
+    """
+    from app.agents.orchestrator.streaming import stream_turn, wait_for_background_turns
+
     body = SimpleNamespace(conversation_id=None, query_text="Is it safe tomorrow?",
                            was_voice_input=False)
     frames = []
@@ -103,6 +112,7 @@ async def collect(consume_all=True, stop_after=None):
             if stop_after and len(frames) >= stop_after:
                 await gen.aclose()   # simulate client hanging up
                 break
+        await wait_for_background_turns(timeout=10.0)
     finally:
         for c in ctxs: c.stop()
     return frames
@@ -150,11 +160,19 @@ async def main():
     got = [e for e, _ in parse_sse(frames)]
     print(f"  client received {len(frames)} frames then hung up: {got}")
     assert "turn_completed" not in got
-    # The detached task owns its own session; give it a moment to finish.
-    await asyncio.sleep(0.5)
     assert "commit" in PERSISTED, "turn must persist despite disconnect"
     print("  PASS  turn still completed and persisted after disconnect")
     print("        (NFR-A1: plan trace and invocations survive a dropped connection)")
+
+    print("\n--- Task is strongly referenced (survives generator GC) ---")
+    import gc
+    from app.agents.orchestrator.streaming import _BACKGROUND_TURNS
+    PERSISTED.clear()
+    frames = await collect(stop_after=2)
+    gc.collect()
+    assert "commit" in PERSISTED
+    print("  PASS  turn persisted even after forced gc.collect()")
+    print(f"        registry drained to {len(_BACKGROUND_TURNS)} in-flight turns")
 
     print("\n--- SSE frame format ---")
     from app.agents.orchestrator.streaming import sse

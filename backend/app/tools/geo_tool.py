@@ -18,6 +18,7 @@ application needs.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -53,6 +54,32 @@ COASTAL_GAZETTEER: dict[str, tuple[float, float]] = {
 }
 
 
+# Relative-time expressions, in the three Iteration 1 languages. Matched as
+# whole words against the query. Longest first, so "day after tomorrow" is not
+# swallowed by "tomorrow".
+RELATIVE_TIME_TOKENS: list[tuple[str, str]] = [
+    ("day after tomorrow", "day_after_tomorrow"),
+    ("tomorrow morning", "tomorrow"),
+    ("tomorrow", "tomorrow"),
+    ("tonight", "tonight"),
+    ("today", "today"),
+    ("now", "today"),
+    # Hindi
+    ("parso", "day_after_tomorrow"),
+    ("kal", "tomorrow"),
+    ("aaj", "today"),
+    # Kannada
+    ("naaledhu", "tomorrow"),
+    ("naale", "tomorrow"),
+    ("ivattu", "today"),
+]
+
+# "12.87, 74.84" or "12.87N 74.84E"
+_COORD_RE = re.compile(
+    r"(-?\d{1,2}\.\d+)\s*[nN]?\s*[, ]\s*(-?\d{1,3}\.\d+)\s*[eE]?"
+)
+
+
 @dataclass
 class ResolvedLocation:
     latitude: float
@@ -67,6 +94,50 @@ class ResolvedWindow:
     end: datetime
     assumed: bool  # FR-A4.2 — a defaulted window must be stated in the answer
     description: str
+
+
+def extract_place(query: str) -> str | None:
+    """Find a known coastal place named in the query.
+
+    Deterministic gazetteer match on whole words, longest name first so
+    "New Mangalore" cannot be shadowed by "Mangalore". No LLM: place
+    resolution decides which stretch of ocean a safety answer describes, and
+    that should not depend on a model's willingness to return valid JSON.
+
+    Returns None for an unrecognised name rather than guessing at the nearest
+    match - FR-D1.4 prefers asking over answering for the wrong coast.
+    """
+    lowered = query.lower()
+    for name in sorted(COASTAL_GAZETTEER, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(name)}\b", lowered):
+            return name
+    return None
+
+
+def extract_coordinates(query: str) -> tuple[float, float] | None:
+    """Explicit coordinates typed into the query."""
+    match = _COORD_RE.search(query)
+    if not match:
+        return None
+    lat, lon = float(match.group(1)), float(match.group(2))
+    if -90 <= lat <= 90 and -180 <= lon <= 180:
+        return lat, lon
+    return None
+
+
+def extract_relative_time(query: str) -> str | None:
+    """Find a relative time expression, or None to let the window default.
+
+    Without this, "is it safe tomorrow?" resolved to the next 12 hours and the
+    answer silently described today - while FR-A4.2's "assumed" flag stayed
+    true, so the mismatch was disclosed as an assumption rather than as an
+    error.
+    """
+    lowered = query.lower()
+    for token, canonical in RELATIVE_TIME_TOKENS:
+        if re.search(rf"\b{re.escape(token)}\b", lowered):
+            return canonical
+    return None
 
 
 def resolve_location(
@@ -132,6 +203,15 @@ def resolve_window(
         return ResolvedWindow(
             start.astimezone(timezone.utc), end.astimezone(timezone.utc),
             assumed=False, description="today (IST)",
+        )
+
+    if token in {"day_after_tomorrow", "parso"}:
+        day = now.date() + timedelta(days=2)
+        start = datetime.combine(day, time(0, 0), tzinfo=IST)
+        end = datetime.combine(day, time(23, 59), tzinfo=IST)
+        return ResolvedWindow(
+            start.astimezone(timezone.utc), end.astimezone(timezone.utc),
+            assumed=False, description="day after tomorrow (IST)",
         )
 
     if token in {"tomorrow", "kal", "naale"}:

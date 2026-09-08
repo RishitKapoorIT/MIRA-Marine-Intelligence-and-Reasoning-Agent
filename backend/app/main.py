@@ -25,6 +25,11 @@ async def lifespan(app: FastAPI):
             settings.dev_auth_phone,
         )
     yield
+    # A turn whose client disconnected may still be running. Give it a moment
+    # to persist rather than tearing the engine out from under it.
+    from app.agents.orchestrator.streaming import wait_for_background_turns
+
+    await wait_for_background_turns(timeout=15.0)
     await dispose_engine()
 
 

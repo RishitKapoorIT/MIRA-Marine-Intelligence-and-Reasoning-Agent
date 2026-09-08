@@ -1,4 +1,8 @@
 pfz:
+  class_labels:
+      "0": BEST
+      "1": GOOD
+      "2": POOR
   grid:
     # Karnataka coastal waters — Iteration 1 (FR-E1, RK-9)
     bbox: { min_lat: 12.0, max_lat: 15.2, min_lon: 73.6, max_lon: 74.9 }
@@ -16,11 +20,11 @@ alerts:
 
 safety:
   wave_height_caution_m: 2.0
-  wave_height_unsafe_m: 3.0
+  wave_height_unsafe_m: 2.5       # IMD Rough Sea Warning
   wind_speed_caution_ms: 10.0
-  wind_speed_unsafe_ms: 15.0
+  wind_speed_unsafe_ms: 12.5      # IMD 45 km/h Fishermen Warning
   wind_gust_caution_ms: 14.0
-  wind_gust_unsafe_ms: 20.0
+  wind_gust_unsafe_ms: 17.0       # IMD 60 km/h upper gust limit
   current_caution_ms: 1.0
   visibility_caution_m: 2000
   max_forecast_age_hours: 6

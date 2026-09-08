@@ -16,7 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 THRESHOLDS_PATH = Path(__file__).parent / "thresholds.yaml"
 
@@ -40,6 +40,44 @@ class PfzThresholds(BaseModel):
     # The configured bbox includes land, which permanently depresses coverage,
     # so this is set low; tighten max_lon toward the coast to raise it.
     min_coverage_fraction: float = 0.3
+    # Maps the raw label the XGBoost model emits to ORCA's zone vocabulary.
+    # The model returns numeric classes, so without this every prediction is
+    # silently non-qualifying and the pipeline reports "no zones" forever.
+    #
+    # NOBODY CAN VERIFY THIS FOR YOU. model.classes_ gives the ORDER of the
+    # classes, not their meaning - the meaning comes from how the label column
+    # was encoded when the model was trained. An inverted mapping sends
+    # fishermen to the least productive water while telling them it is the
+    # best, and unlike an unmapped label it looks like the system is working.
+    class_labels: dict[str, str] = {}
+
+    @field_validator("class_labels", mode="before")
+    @classmethod
+    def _coerce_keys(cls, value):
+        """YAML parses unquoted 0/1/2 as ints. Accept both forms rather than
+        failing to load over a missing pair of quotes."""
+        if isinstance(value, dict):
+            return {str(k): v for k, v in value.items()}
+        return value
+
+    @model_validator(mode="after")
+    def _check_class_labels(self):
+        valid = {"BEST", "GOOD", "POOR"}
+        for raw, mapped in self.class_labels.items():
+            if str(mapped).upper() not in valid:
+                raise ValueError(
+                    f"pfz.class_labels maps {raw!r} to {mapped!r}; must be one "
+                    f"of {sorted(valid)}"
+                )
+        # Two labels mapping to the same class is legal but almost always a
+        # typo, and it silently halves the model's resolution.
+        targets = [str(v).upper() for v in self.class_labels.values()]
+        if len(targets) != len(set(targets)):
+            raise ValueError(
+                f"pfz.class_labels is not one-to-one: {self.class_labels}. "
+                "Two model classes map to the same ORCA zone class."
+            )
+        return self
 
 
 class AlertThresholds(BaseModel):

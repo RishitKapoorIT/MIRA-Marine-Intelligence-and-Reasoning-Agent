@@ -40,6 +40,28 @@ logger = logging.getLogger(__name__)
 HEARTBEAT_SECONDS = 15.0
 _SENTINEL = object()
 
+# asyncio holds only a WEAK reference to a running task. Once the SSE
+# generator closes, its frame is destroyed and the only strong reference to
+# the detached turn goes with it - so the task can be garbage collected
+# mid-execution and the turn is silently lost. This is exactly the disconnect
+# case we set out to protect, and it fails without a warning.
+# See the asyncio.create_task docs: "Save a reference to the result of this
+# function, to avoid a task disappearing mid-execution."
+_BACKGROUND_TURNS: set[asyncio.Task] = set()
+
+
+def _track(task: asyncio.Task) -> None:
+    _BACKGROUND_TURNS.add(task)
+    task.add_done_callback(_BACKGROUND_TURNS.discard)
+
+
+async def wait_for_background_turns(timeout: float = 30.0) -> None:
+    """Await in-flight turns. Used by the app lifespan on shutdown, and by
+    tests that need to observe persistence deterministically."""
+    if not _BACKGROUND_TURNS:
+        return
+    await asyncio.wait(set(_BACKGROUND_TURNS), timeout=timeout)
+
 
 def sse(event: str, data: dict[str, Any]) -> str:
     """One SSE frame. `default=str` so UUIDs and datetimes serialise."""
@@ -121,6 +143,7 @@ async def stream_turn(body, current_user) -> AsyncGenerator[str, None]:
     }
 
     task = asyncio.create_task(_run_and_persist(initial_state, queue, started))
+    _track(task)
 
     yield sse("turn_started", {"query": body.query_text})
 

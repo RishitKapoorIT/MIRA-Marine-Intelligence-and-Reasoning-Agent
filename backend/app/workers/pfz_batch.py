@@ -26,7 +26,7 @@ import logging
 from datetime import datetime, timezone
 
 from geoalchemy2 import WKTElement
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.constants import SRID, GenerationStatus
@@ -57,6 +57,16 @@ async def _prune_generations(db: AsyncSession) -> int:
 async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
     started = datetime.now(timezone.utc)
 
+    # Printed every run. Code cannot verify this mapping is the right way
+    # round, so the least it can do is state which one it is using.
+    if not thresholds.pfz.class_labels:
+        logger.warning(
+            "pfz.class_labels is empty. If the model emits numeric classes "
+            "the batch will fail on the first prediction."
+        )
+    else:
+        logger.info("PFZ class mapping in use: %s", thresholds.pfz.class_labels)
+
     generation = PfzGeneration(
         status=GenerationStatus.BUILDING,
         composite_days=thresholds.pfz.composite_days,
@@ -65,6 +75,9 @@ async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
         thresholds_snapshot={
             "min_zone_area_km2": thresholds.pfz.min_zone_area_km2,
             "salinity_constant_psu": thresholds.pfz.salinity_constant_psu,
+            # Recorded WITH the product: if the mapping is later found to be
+            # inverted, every affected generation is identifiable.
+            "class_labels": thresholds.pfz.class_labels,
         },
     )
     if not dry_run:
@@ -162,18 +175,25 @@ async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
         await db.flush()
 
         # --- 5. Atomic swap ----------------------------------------------
-        previous = (
-            await db.execute(
-                select(PfzGeneration).where(
-                    PfzGeneration.status == GenerationStatus.PUBLISHED
-                )
-            )
-        ).scalar_one_or_none()
-        if previous is not None:
-            previous.status = GenerationStatus.SUPERSEDED
+        # Demote THEN promote, each as an explicit statement with its own
+        # flush. Setting both attributes and letting the ORM flush them
+        # together does not work: the unit of work orders UPDATEs by when
+        # objects entered the session, so the promote was emitted first and
+        # uq_pfz_one_published rejected it while the old row was still
+        # published. A Core UPDATE removes the ordering ambiguity entirely.
+        #
+        # Both statements are in one transaction, so a reader still sees
+        # exactly one published generation at every point (FR-E1.14).
+        await db.execute(
+            update(PfzGeneration)
+            .where(PfzGeneration.status == GenerationStatus.PUBLISHED)
+            .values(status=GenerationStatus.SUPERSEDED)
+        )
+        await db.flush()
 
         generation.status = GenerationStatus.PUBLISHED
         generation.published_at = datetime.now(timezone.utc)
+        await db.flush()
 
         pruned = await _prune_generations(db)
         await db.commit()
@@ -191,10 +211,29 @@ async def run_batch(db: AsyncSession, dry_run: bool = False) -> dict:
     except Exception as exc:
         logger.exception("PFZ batch failed")
         if not dry_run:
-            # FR-E1.15 — the previously published generation is untouched.
-            generation.status = GenerationStatus.FAILED
-            generation.failure_detail = str(exc)[:1000]
-            await db.commit()
+            # The session may be in a pending-rollback state (a failed flush
+            # poisons it), so roll back first. That also undoes this run's
+            # INSERT, so the failure is recorded as a fresh row in a new
+            # transaction rather than by mutating an object that no longer
+            # has a row behind it.
+            try:
+                await db.rollback()
+                db.add(
+                    PfzGeneration(
+                        status=GenerationStatus.FAILED,
+                        failure_detail=str(exc)[:1000],
+                        grid_bbox=thresholds.pfz.grid.bbox,
+                        grid_spacing_deg=thresholds.pfz.grid.spacing_deg,
+                    )
+                )
+                await db.commit()
+            except Exception:
+                # Recording the failure must never become a second, louder
+                # failure. The batch is scheduled, so a crash here would take
+                # out the whole run and obscure the original cause.
+                logger.exception("Could not record the failed generation")
+            # FR-E1.15 — the previously published generation is untouched, so
+            # the app keeps serving yesterday's zones with an honest date.
         return {"status": "failed", "error": str(exc)}
 
 

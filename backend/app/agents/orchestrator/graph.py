@@ -67,11 +67,19 @@ Rules:
 async def resolve_context(state: OrcaState) -> dict:
     """FR-D1 / FR-D3. FR-D1.4: no location means ask, never assume."""
     user = state["_user"]
+    query = state["query_text"]
 
+    # Extract place, coordinates and timeframe FROM THE QUERY. Without this
+    # nothing ever populated _named_place or _relative_time, so "is it safe to
+    # sail from Karwar tomorrow?" resolved to the user's base location for the
+    # next 12 hours - and with no base location it aborted outright, which is
+    # what the 3ms clarification_requested was.
     location = geo_tool.resolve_location(
         user,
-        explicit_coords=state.get("_explicit_coords"),
-        named_place=state.get("_named_place"),
+        explicit_coords=(
+            state.get("_explicit_coords") or geo_tool.extract_coordinates(query)
+        ),
+        named_place=state.get("_named_place") or geo_tool.extract_place(query),
         shared_position=state.get("_shared_position"),
         live_gps=state.get("_live_gps"),
     )
@@ -83,13 +91,16 @@ async def resolve_context(state: OrcaState) -> dict:
             "location": None,
             "window": None,
             "clarification_needed": (
-                "I do not know where you are asking about. Please set your home "
-                "port in your profile, or tell me the place name."
+                "I do not know which area you are asking about. Tell me a place "
+                "name (for example Mangaluru, Malpe or Karwar), give "
+                "coordinates, or set your home port in your profile."
             ),
             "status": TurnStatus.CLARIFICATION_REQUESTED.value,
         }
 
-    window = geo_tool.resolve_window(relative=state.get("_relative_time"))
+    window = geo_tool.resolve_window(
+        relative=state.get("_relative_time") or geo_tool.extract_relative_time(query)
+    )
     await emit(
         state,
         "context_resolved",

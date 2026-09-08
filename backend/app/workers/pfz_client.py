@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass
 
 from app.core.config import settings
+from app.core.thresholds import thresholds
 from app.workers.pfz_features import FeaturePoint
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,53 @@ FEATURE_KEYS = [
 ]
 
 
+VALID_ZONE_CLASSES = {"BEST", "GOOD", "POOR"}
+
+
+class UnmappedLabelError(RuntimeError):
+    """The model emitted a label ORCA has no mapping for.
+
+    Raised rather than defaulted, because the failure mode it replaces is
+    invisible: an unmapped label silently fails the BEST/GOOD test in
+    pfz_derive, so the batch publishes zero zones and reports
+    NO_QUALIFYING_CONDITIONS - indistinguishable from a real finding that the
+    sea is unproductive. A configuration error must not be able to masquerade
+    as an oceanographic result.
+    """
+
+
 @dataclass
 class Prediction:
     latitude: float
     longitude: float
     zone_class: str
     confidence: float | None
+
+
+def map_label(raw: object) -> str:
+    """Model label -> ORCA zone vocabulary."""
+    text = str(raw).strip()
+
+    # Already in our vocabulary (a model trained with string labels).
+    if text.upper() in VALID_ZONE_CLASSES:
+        return text.upper()
+
+    mapped = thresholds.pfz.class_labels.get(text)
+    if mapped is None:
+        raise UnmappedLabelError(
+            f"Model returned label {text!r}, which is not in ORCA's zone "
+            f"vocabulary and has no entry in thresholds.yaml pfz.class_labels. "
+            f"Configured mappings: {thresholds.pfz.class_labels or '(none)'}. "
+            f"Determine the model's class order with "
+            f"`python -m scripts.diagnose_pfz --labels` and configure it."
+        )
+
+    if mapped.upper() not in VALID_ZONE_CLASSES:
+        raise UnmappedLabelError(
+            f"pfz.class_labels maps {text!r} to {mapped!r}, which is not one "
+            f"of {sorted(VALID_ZONE_CLASSES)}."
+        )
+    return mapped.upper()
 
 
 def to_payload(point: FeaturePoint) -> dict:
@@ -87,11 +129,14 @@ async def classify(points: list[FeaturePoint]) -> tuple[list[Prediction], list[s
             continue
 
         for point, row in zip(chunk, rows):
+            # Deliberately not caught: an unmapped label fails the whole batch
+            # so the generation is marked FAILED and the previous published
+            # one stays in place (FR-E1.15).
             predictions.append(
                 Prediction(
                     latitude=point.latitude,
                     longitude=point.longitude,
-                    zone_class=str(row.get("predicted_zone", "POOR")).upper(),
+                    zone_class=map_label(row.get("predicted_zone")),
                     confidence=row.get("confidence"),
                 )
             )
