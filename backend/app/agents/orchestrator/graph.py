@@ -320,6 +320,14 @@ async def _run_agents(names: list[str], state: OrcaState, start_index: int):
                     "summary": output.summary,
                     "latency_ms": int((time.perf_counter() - started) * 1000),
                     "missing_inputs": output.missing_inputs,
+                    # Underscore-prefixed keys are internal carriers (raw
+                    # envelopes passed to the verdict node) and are large;
+                    # the rest is what the UI renders, e.g. the ocean agent's
+                    # zone list.
+                    "findings": {
+                        k: v for k, v in (output.findings or {}).items()
+                        if not k.startswith("_")
+                    },
                 },
             )
             return name, output, InvocationStatus.OK, None, int(

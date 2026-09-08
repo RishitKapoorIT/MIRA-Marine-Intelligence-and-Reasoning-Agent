@@ -48,4 +48,15 @@ app.include_router(api_router, prefix="/api/v1")
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok"}
+    """Unauthenticated liveness probe.
+
+    Reports dev_auth_bypass so the client can state plainly that
+    authentication is disabled, rather than inferring it from the fact that
+    /auth/me succeeded without a login. A banner claiming "dev bypass active"
+    should rest on a fact, not a guess.
+    """
+    return {
+        "status": "ok",
+        "app_env": settings.app_env,
+        "dev_auth_bypass": settings.dev_auth_bypass,
+    }
