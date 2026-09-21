@@ -6,7 +6,8 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
  */
 export default function BottomTabBar({ hazardCount }) {
   return (
-    <div className="flex items-center justify-between bg-orca-surface border-t border-orca-border px-4 py-2 text-xs z-10">
+    <div className="hidden md:flex items-center justify-between bg-orca-surface border-t border-orca-border px-4 py-2 text-xs z-10">
+
       <div className="text-orca-muted text-[11px] flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-400" />
         <span>Use the floating <strong>Map Layers</strong> panel to toggle oceanographic data.</span>

@@ -1,6 +1,10 @@
 node_modules/
 dist/
 dist-ssr/
+frontend/dist/
+.vercel
+.output
+.turbo
 *.local
 __pycache__/
 *.py[cod]
@@ -16,4 +20,8 @@ serviceAccountKey.json
 .vscode/
 .idea/
 *.log
+*.db
+*.sqlite
+*.sqlite3
 .DS_Store
+

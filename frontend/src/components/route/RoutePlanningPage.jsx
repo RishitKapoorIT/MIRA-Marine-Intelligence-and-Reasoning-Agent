@@ -18,7 +18,8 @@ import {
   Route,
   AlertTriangle,
   Layers,
-  MapPin
+  MapPin,
+  Map as MapIcon
 } from 'lucide-react';
 
 function MapController({ bounds, center }) {
@@ -70,6 +71,7 @@ export default function RoutePlanningPage() {
   // Computed routes
   const [routes, setRoutes] = useState([]);
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [mobileView, setMobileView] = useState('plan'); // 'plan' | 'map'
 
   useEffect(() => {
     calculateRoutes();
@@ -92,11 +94,42 @@ export default function RoutePlanningPage() {
     <div className="h-screen bg-orca-bg flex flex-col overflow-hidden">
       <Header />
 
-      {/* Main Layout: Sidebar & Full-Height Live Route Map (Fix A6) */}
+      {/* Mobile View Toggle Bar */}
+      <div className="md:hidden flex items-center justify-between p-2.5 bg-orca-surface border-b border-orca-border flex-shrink-0 z-20">
+        <div className="flex items-center gap-1.5 bg-orca-bg p-1 rounded-xl border border-orca-border w-full">
+          <button
+            onClick={() => setMobileView('plan')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'plan'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <Route size={14} />
+            <span>Route Plan</span>
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'map'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <MapIcon size={14} />
+            <span>Live Map</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Layout: Sidebar & Full-Height Live Route Map */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* Left Route Planning Sidebar */}
-        <div className="w-full md:w-[440px] lg:w-[460px] bg-orca-surface border-r border-orca-border flex flex-col h-full z-10 flex-shrink-0">
+        <div className={`w-full md:w-[440px] lg:w-[460px] bg-orca-surface border-r border-orca-border flex-col h-full z-10 flex-shrink-0 mb-14 md:mb-0 ${
+          mobileView === 'map' ? 'hidden md:flex' : 'flex'
+        }`}>
+
           
           {/* Form Header */}
           <div className="p-4 border-b border-orca-border bg-orca-surface-2/20 space-y-3 flex-shrink-0">
@@ -290,7 +323,10 @@ export default function RoutePlanningPage() {
         </div>
 
         {/* ── Right Leaflet Map Panel (Draws Selected Polyline & Avoidance Arcs) ── */}
-        <div className="flex-1 min-h-0 h-full relative bg-orca-bg">
+        <div className={`flex-1 min-h-0 h-full relative bg-orca-bg mb-14 md:mb-0 ${
+          mobileView === 'plan' ? 'hidden md:flex' : 'flex'
+        }`}>
+
           <MapContainer
             center={MANGALORE_FALLBACK}
             zoom={8}

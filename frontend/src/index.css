@@ -48,15 +48,31 @@
   .card-hover {
     @apply hover:bg-orca-surface-2 transition-colors duration-150;
   }
+
+  /* Mobile Safe Area Insets for iOS & Android */
+  .pb-safe {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 4.5rem);
+  }
+
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 /* Leaflet overrides — keep map tiles dark-edged */
 .leaflet-container {
   background: #0e1822 !important;
   font-family: 'Inter', sans-serif !important;
+  z-index: 1 !important;
 }
 
 /* Fix Leaflet marker icon paths broken by Vite bundling */
 .leaflet-default-icon-path {
   background-image: url('https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png');
 }
+

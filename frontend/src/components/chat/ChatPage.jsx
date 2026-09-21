@@ -10,9 +10,11 @@ import { getWeatherData } from '../../data/weather.js';
 import { SAMPLE_HAZARD_ZONES } from '../../data/hazards.js';
 import { useLocationState, getSectorForLatLon, KNOWN_COASTAL_LOCATIONS } from '../../context/LocationContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { safeStorage, escapeHtml } from '../../utils/storage.js';
 import {
   Send,
   Mic,
+  MicOff,
   Paperclip,
   Sparkles,
   MapPin,
@@ -30,29 +32,85 @@ import {
   CheckCircle2,
   ArrowRight,
   Navigation,
-  Anchor
+  Anchor,
+  Volume2,
+  VolumeX,
+  Copy,
+  Check,
+  Radio,
+  History,
+  MessageSquare
 } from 'lucide-react';
 import { generateMarineAiResponse } from './marineChatEngine.js';
+
 
 function renderFormattedText(text) {
   if (!text) return null;
   const lines = text.split('\n');
   return (
-    <div className="space-y-1.5 leading-relaxed">
-      {lines.map((line, idx) => {
-        if (!line.trim()) return <div key={idx} className="h-1" />;
-        const parts = line.split(/(\*\*.*?\*\*|`.*?`)/g);
+    <div className="space-y-2 leading-relaxed text-sm">
+      {lines.map((rawLine, idx) => {
+        const line = rawLine.trim();
+        if (!line) return <div key={idx} className="h-1" />;
+
+        // Header 3
+        if (rawLine.startsWith('### ')) {
+          return (
+            <h4 key={idx} className="text-sm font-bold text-white pt-2 pb-1 border-b border-orca-border/50 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-orca-teal inline-block" />
+              <span>{rawLine.replace(/^###\s*/, '')}</span>
+            </h4>
+          );
+        }
+
+        // Header 4
+        if (rawLine.startsWith('#### ')) {
+          return (
+            <h5 key={idx} className="text-xs font-bold uppercase tracking-wider text-orca-teal pt-1 pb-0.5">
+              {rawLine.replace(/^####\s*/, '')}
+            </h5>
+          );
+        }
+
+        const isBullet = line.startsWith('•') || line.startsWith('-');
+        const isNumber = /^\d+\.\s/.test(line);
+        const contentToParse = isBullet ? line.replace(/^[•\-]\s*/, '') : isNumber ? line.replace(/^\d+\.\s*/, '') : rawLine;
+
+        const parts = contentToParse.split(/(\*\*.*?\*\*|`.*?`)/g);
+
+        const renderedContent = parts.map((part, pIdx) => {
+          if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={pIdx} className="text-white font-bold">{part.slice(2, -2)}</strong>;
+          }
+          if (part.startsWith('`') && part.endsWith('`')) {
+            return <code key={pIdx} className="px-1.5 py-0.5 rounded bg-orca-bg border border-orca-border font-mono text-[11px] text-orca-teal font-semibold">{part.slice(1, -1)}</code>;
+          }
+          return part;
+        });
+
+        if (isBullet) {
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-2 text-orca-muted text-xs leading-normal">
+              <span className="text-orca-teal font-bold select-none">•</span>
+              <div className="flex-1">{renderedContent}</div>
+            </div>
+          );
+        }
+
+        if (isNumber) {
+          const numMatch = line.match(/^(\d+)\.\s/);
+          const num = numMatch ? numMatch[1] : '';
+          return (
+            <div key={idx} className="flex items-start gap-2 pl-2 text-orca-muted text-xs leading-normal">
+              <span className="text-orca-teal font-mono font-bold select-none">{num}.</span>
+              <div className="flex-1">{renderedContent}</div>
+            </div>
+          );
+        }
+
         return (
-          <p key={idx} className={line.trim().startsWith('•') ? 'pl-2 text-orca-muted' : ''}>
-            {parts.map((part, pIdx) => {
-              if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={pIdx} className="text-white font-bold">{part.slice(2, -2)}</strong>;
-              }
-              if (part.startsWith('`') && part.endsWith('`')) {
-                return <code key={pIdx} className="px-1.5 py-0.5 rounded bg-orca-bg border border-orca-border font-mono text-[11px] text-orca-teal">{part.slice(1, -1)}</code>;
-              }
-              return part;
-            })}
+          <p key={idx} className="text-orca-muted text-xs leading-relaxed">
+            {renderedContent}
           </p>
         );
       })}
@@ -65,32 +123,54 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get('q');
+  const handledQueryRef = useRef(false);
 
   const { currentLocation, setCurrentLocation, resolveLocationFromText } = useLocationState();
   const { user, safeHouse } = useAuth();
 
-  // ── 1. Persistent Thread and Messages Storage (LocalStorage) ──
-  const getStoredThreads = () => {
+  // Compute effective home harbor grounded in the authenticated mariner's profile
+  const effectiveLocation = React.useMemo(() => {
+    if (user?.safe_house?.lat && user?.safe_house?.lon) {
+      const match = KNOWN_COASTAL_LOCATIONS.find(
+        l => Math.abs(l.lat - user.safe_house.lat) < 0.15 && Math.abs(l.lon - user.safe_house.lon) < 0.15
+      );
+      if (match) return match;
+      return {
+        key: 'user-safehouse',
+        name: user.safe_house.label || 'Home Port Basin',
+        lat: user.safe_house.lat,
+        lon: user.safe_house.lon,
+        region: user.safe_house.region || 'Coastal Waters',
+        sector: user.safe_house.sector || 'Home Waters',
+      };
+    }
+    return currentLocation || KNOWN_COASTAL_LOCATIONS.find(l => l.key === 'mangalore');
+  }, [user?.id, user?.safe_house?.lat, user?.safe_house?.lon, currentLocation]);
+
+  const userId = user?.id || 'guest';
+
+  // ── 1. User-Scoped Persistent Thread and Messages Storage ──
+  const getStoredThreadsForUser = (uId, loc) => {
     try {
-      const saved = localStorage.getItem('orca_chat_threads');
+      const saved = safeStorage.getItem(`orca_chat_${uId}_threads`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    const baseLoc = currentLocation?.name?.split(' ')[0] || 'Coastal';
+    const locShort = loc?.name?.split(' ')[0] || 'Coastal';
     return [
-      { id: 't-1', title: `Marine Intelligence (${baseLoc})`, timestamp: 'Active', isRealMl: true }
+      { id: `t-init-${uId}`, title: `Marine Advisory (${locShort})`, timestamp: 'Active', isRealMl: true }
     ];
   };
 
-  const getStoredActiveThreadId = () => {
-    return localStorage.getItem('orca_active_thread_id') || 't-1';
+  const getStoredActiveThreadIdForUser = (uId) => {
+    return safeStorage.getItem(`orca_chat_${uId}_active_id`) || `t-init-${uId}`;
   };
 
-  const getStoredMessagesMap = () => {
+  const getStoredMessagesMapForUser = (uId) => {
     try {
-      const saved = localStorage.getItem('orca_chat_messages_map');
+      const saved = safeStorage.getItem(`orca_chat_${uId}_messages_map`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed === 'object' && parsed !== null) return parsed;
@@ -99,12 +179,18 @@ export default function ChatPage() {
     return {};
   };
 
-  const [threads, setThreads] = useState(getStoredThreads);
-  const [activeThreadId, setActiveThreadId] = useState(getStoredActiveThreadId);
-  const [messagesMap, setMessagesMap] = useState(getStoredMessagesMap);
+  const [threads, setThreads] = useState(() => getStoredThreadsForUser(userId, effectiveLocation));
+  const [activeThreadId, setActiveThreadId] = useState(() => getStoredActiveThreadIdForUser(userId));
+  const [messagesMap, setMessagesMap] = useState(() => getStoredMessagesMapForUser(userId));
+  const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
 
   const [inputQuery, setInputQuery] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [speakingMsgId, setSpeakingMsgId] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const recognitionRef = useRef(null);
+
   const [stepStatus, setStepStatus] = useState({
     planner: 'queued',
     weather: 'queued',
@@ -115,24 +201,162 @@ export default function ChatPage() {
   const chatScrollRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Synchronize state changes to localStorage
+  // When active user ID switches, reload their isolated chat state
+  useEffect(() => {
+    const loadedThreads = getStoredThreadsForUser(userId, effectiveLocation);
+    const loadedActiveId = getStoredActiveThreadIdForUser(userId);
+    const loadedMessages = getStoredMessagesMapForUser(userId);
+
+    setThreads(loadedThreads);
+    setActiveThreadId(loadedActiveId);
+    setMessagesMap(loadedMessages);
+  }, [userId]);
+
+  // Persist whenever threads, activeId, or messagesMap change
   useEffect(() => {
     try {
-      localStorage.setItem('orca_chat_threads', JSON.stringify(threads));
+      safeStorage.setItem(`orca_chat_${userId}_threads`, JSON.stringify(threads));
     } catch {}
-  }, [threads]);
+  }, [threads, userId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('orca_active_thread_id', activeThreadId);
+      safeStorage.setItem(`orca_chat_${userId}_active_id`, activeThreadId);
     } catch {}
-  }, [activeThreadId]);
+  }, [activeThreadId, userId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem('orca_chat_messages_map', JSON.stringify(messagesMap));
+      safeStorage.setItem(`orca_chat_${userId}_messages_map`, JSON.stringify(messagesMap));
     } catch {}
-  }, [messagesMap]);
+  }, [messagesMap, userId]);
+
+  // Clean up audio on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  const handleSpeakText = (msgId, rawText) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (speakingMsgId === msgId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMsgId(null);
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const cleanText = (rawText || '')
+      .replace(/###/g, '')
+      .replace(/\*\*/g, '')
+      .replace(/`/g, '')
+      .replace(/•/g, '')
+      .replace(/[\n\r]+/g, '. ')
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => setSpeakingMsgId(null);
+    utterance.onerror = () => setSpeakingMsgId(null);
+    setSpeakingMsgId(msgId);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleVoiceInput = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Voice recognition is not supported in this browser. Please use Chrome, Edge, or a Chromium browser.');
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-IN';
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputQuery(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error('Speech recognition start failed:', err);
+      setIsListening(false);
+    }
+  };
+
+  const handleCopyText = (msgId, text) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    setCopiedMsgId(msgId);
+    setTimeout(() => setCopiedMsgId(null), 2000);
+  };
+
+  const handleDeleteThread = (threadId) => {
+    const updated = threads.filter(t => t.id !== threadId);
+    if (updated.length === 0) {
+      const locName = effectiveLocation?.name?.split(' ')[0] || 'Coastal';
+      const freshId = `t-${Date.now()}`;
+      const fresh = [{ id: freshId, title: `Marine Advisory (${locName})`, timestamp: 'Active', isRealMl: true }];
+      setThreads(fresh);
+      setActiveThreadId(freshId);
+      try {
+        localStorage.setItem(`orca_chat_${userId}_threads`, JSON.stringify(fresh));
+        localStorage.setItem(`orca_chat_${userId}_active_id`, freshId);
+      } catch {}
+    } else {
+      setThreads(updated);
+      if (activeThreadId === threadId) {
+        setActiveThreadId(updated[0].id);
+        try {
+          localStorage.setItem(`orca_chat_${userId}_active_id`, updated[0].id);
+        } catch {}
+      }
+      try {
+        localStorage.setItem(`orca_chat_${userId}_threads`, JSON.stringify(updated));
+      } catch {}
+    }
+
+    setMessagesMap(prev => {
+      const copy = { ...prev };
+      delete copy[threadId];
+      try {
+        localStorage.setItem(`orca_chat_${userId}_messages_map`, JSON.stringify(copy));
+      } catch {}
+      return copy;
+    });
+  };
 
   // Messages of the active thread
   const activeMessages = messagesMap[activeThreadId] || [];
@@ -142,9 +366,10 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeMessages, isProcessing]);
 
-  // Handle URL query parameter if present
+  // Handle URL query parameter if present (guarded against re-firing)
   useEffect(() => {
-    if (initialQuery) {
+    if (initialQuery && !handledQueryRef.current) {
+      handledQueryRef.current = true;
       handleSendQuery(initialQuery);
     }
   }, [initialQuery]);
@@ -165,17 +390,26 @@ export default function ChatPage() {
       timestamp: 'Just now',
     };
 
-    // Append user message immediately
-    setMessagesMap(prev => ({
-      ...prev,
-      [activeThreadId]: [...(prev[activeThreadId] || []), userMsg],
-    }));
+    const targetThreadId = activeThreadId;
+
+    // Append user message immediately and synchronously save to localStorage
+    setMessagesMap(prev => {
+      const updated = {
+        ...prev,
+        [targetThreadId]: [...(prev[targetThreadId] || []), userMsg],
+      };
+      try {
+        localStorage.setItem(`orca_chat_${userId}_messages_map`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     setIsProcessing(true);
 
-    await runAgentPipeline(queryText);
+    await runAgentPipeline(queryText, targetThreadId);
   };
 
-  const runAgentPipeline = async (queryText) => {
+  const runAgentPipeline = async (queryText, targetThreadId = activeThreadId) => {
     setStepStatus({
       planner: 'running',
       weather: 'queued',
@@ -186,32 +420,26 @@ export default function ChatPage() {
     // ── Step 1: Location Resolution & Grounding ──
     let targetLoc = await resolveLocationFromText(queryText);
 
-    // If query refers to user's personal area / home harbor / safe house or no explicit place specified
+    // If query does not mention another coastal port or is asking about home waters / safe house
     if (!targetLoc) {
-      if (currentLocation) {
-        targetLoc = currentLocation;
-      } else if (user?.safe_house) {
-        targetLoc = {
-          name: user.safe_house.label || 'Safe House Harbor',
-          lat: user.safe_house.lat,
-          lon: user.safe_house.lon,
-          region: 'Coastal Waters',
-          sector: getSectorForLatLon(user.safe_house.lat, user.safe_house.lon),
-        };
-      } else {
-        targetLoc = { lat: 12.914, lon: 74.856, name: 'Mangalore Coastal Shelf Basin', sector: 'Sector 7' };
-      }
+      targetLoc = effectiveLocation;
     }
 
-    // Keep active focus location synced with the user's current inquiry
-    setCurrentLocation(targetLoc);
+    // Only update app-wide focus if user explicitly inquired about a different coastal port
+    if (targetLoc && targetLoc.key && targetLoc.key !== currentLocation?.key) {
+      setCurrentLocation(targetLoc);
+    }
 
-    // Update active thread title to match context
+    // Update active thread title to match query context
     const threadTitle = queryText.length > 25 ? `${queryText.slice(0, 22)}...` : queryText;
 
-    setThreads(prev =>
-      prev.map(th => (th.id === activeThreadId ? { ...th, title: threadTitle } : th))
-    );
+    setThreads(prev => {
+      const updated = prev.map(th => (th.id === targetThreadId ? { ...th, title: threadTitle } : th));
+      try {
+        localStorage.setItem(`orca_chat_${userId}_threads`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     await new Promise(r => setTimeout(r, 150));
     setStepStatus(prev => ({ ...prev, planner: 'done', weather: 'running' }));
@@ -246,6 +474,7 @@ export default function ChatPage() {
       weatherData,
       pfzResult,
       hazards: SAMPLE_HAZARD_ZONES,
+      conversationHistory: messagesMap[targetThreadId] || [],
     });
 
     const nearbyHazard = SAMPLE_HAZARD_ZONES[1]; // Regional alert
@@ -265,24 +494,35 @@ export default function ChatPage() {
       isLive: pfzResult?.isLive ?? false,
     };
 
-    setMessagesMap(prev => ({
-      ...prev,
-      [activeThreadId]: [...(prev[activeThreadId] || []), botResponse],
-    }));
+    setMessagesMap(prev => {
+      const updated = {
+        ...prev,
+        [targetThreadId]: [...(prev[targetThreadId] || []), botResponse],
+      };
+      try {
+        safeStorage.setItem(`orca_chat_${userId}_messages_map`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     setIsProcessing(false);
   };
 
   const handleNewChat = () => {
     const newId = `t-${Date.now()}`;
-    const locName = currentLocation?.name?.split(' ')[0] || 'Coastal';
+    const locName = effectiveLocation?.name?.split(' ')[0] || 'Coastal';
     const newThread = {
       id: newId,
       title: `Query ${threads.length + 1} (${locName})`,
       timestamp: 'Just Now',
       isRealMl: true,
     };
-    setThreads(prev => [newThread, ...prev]);
+    const updatedThreads = [newThread, ...threads];
+    setThreads(updatedThreads);
     setActiveThreadId(newId);
+    try {
+      safeStorage.setItem(`orca_chat_${userId}_threads`, JSON.stringify(updatedThreads));
+      safeStorage.setItem(`orca_chat_${userId}_active_id`, newId);
+    } catch {}
   };
 
   const scrollToTop = () => {
@@ -293,7 +533,7 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const activeLocName = currentLocation?.name || 'Mangalore Coastal Shelf Basin';
+  const activeLocName = effectiveLocation?.name || 'Coastal Shelf Basin';
   const activeShortPlace = activeLocName.split(' ')[0];
 
   return (
@@ -302,19 +542,40 @@ export default function ChatPage() {
       <Header />
 
       {/* Main Workspace Layout with Full-Height Sidebar & Chat Thread */}
-      <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* Full-Height Sidebar with Persistent Thread History */}
+      <div className="flex-1 min-h-0 flex overflow-hidden relative">
+        {/* Full-Height Sidebar with Persistent Thread History & Mobile Drawer */}
         <Sidebar
           threads={threads}
           activeThreadId={activeThreadId}
           onSelectThread={setActiveThreadId}
           onNewChat={handleNewChat}
+          onDeleteThread={handleDeleteThread}
+          mobileOpen={mobileHistoryOpen}
+          onCloseMobile={() => setMobileHistoryOpen(false)}
         />
 
         {/* Chat Area */}
         <main className="flex-1 min-h-0 flex flex-col bg-orca-bg overflow-hidden relative">
+          {/* Mobile Top Context & Drawer Bar */}
+          <div className="md:hidden flex items-center justify-between px-3 py-2 border-b border-orca-border bg-orca-surface/80 backdrop-blur z-10">
+            <button
+              type="button"
+              onClick={() => setMobileHistoryOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-orca-surface-2 border border-orca-border text-xs text-orca-muted hover:text-white transition-colors touch-target"
+            >
+              <History size={14} className="text-orca-teal" />
+              <span>Threads ({threads.length})</span>
+            </button>
+
+            <div className="text-[11px] text-orca-teal font-semibold flex items-center gap-1">
+              <MapPin size={12} />
+              <span className="truncate max-w-[150px]">{activeLocName}</span>
+            </div>
+          </div>
+
           {/* Messages Scroll View */}
-          <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 md:p-8 space-y-6">
+          <div ref={chatScrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-8 space-y-5">
+
             
             {/* Empty State: Customized to the User's Active Location & Profile */}
             {activeMessages.length === 0 && !isProcessing && (
@@ -328,10 +589,10 @@ export default function ChatPage() {
                   </h3>
                   <div className="flex items-center justify-center gap-1.5 text-xs text-orca-teal font-semibold">
                     <MapPin size={14} />
-                    <span>Connected Region: {activeLocName} ({currentLocation?.sector || 'Coastal Sector'})</span>
+                    <span>Mariner: {user?.name || 'Coastal Fisher'} • Port: {activeLocName} ({effectiveLocation?.sector || 'Coastal Waters'})</span>
                   </div>
                   <p className="text-xs text-orca-muted leading-relaxed max-w-md pt-1">
-                    Ask natural questions in plain language about live weather, swell safety, predicted fishing zones (PFZ), or safe routes for your area.
+                    Ask natural questions in plain language about live weather, sea swell, predicted fishing zones (PFZ), or safe passage routes for {activeShortPlace} waters.
                   </p>
                 </div>
 
@@ -346,11 +607,11 @@ export default function ChatPage() {
                   </button>
 
                   <button
-                    onClick={() => handleSendQuery('Can I go out to sea right now?')}
+                    onClick={() => handleSendQuery(`Can I go out to sea right now from ${activeShortPlace}?`)}
                     className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-orca-teal/40 transition-all flex items-center gap-2 group"
                   >
                     <Waves size={16} className="text-cyan-400 group-hover:scale-110 transition-transform flex-shrink-0" />
-                    <span className="truncate">🌊 Can I sail safely today? (Sea Swell)</span>
+                    <span className="truncate">🌊 Can I sail safely today from {activeShortPlace}?</span>
                   </button>
 
                   <button
@@ -358,15 +619,47 @@ export default function ChatPage() {
                     className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-purple-400/40 transition-all flex items-center gap-2 group"
                   >
                     <span className="text-base group-hover:scale-110 transition-transform flex-shrink-0">🏠</span>
-                    <span className="truncate">🏠 Where is my Safe House?</span>
+                    <span className="truncate">🏠 Where is my Safe House ({user?.safe_house?.label?.split(' ')[0] || activeShortPlace})?</span>
                   </button>
 
                   <button
-                    onClick={() => handleSendQuery('nearest port to me')}
+                    onClick={() => handleSendQuery(`nearest port to ${activeShortPlace}`)}
                     className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-orca-teal/40 transition-all flex items-center gap-2 group"
                   >
                     <Anchor size={16} className="text-orca-teal group-hover:scale-110 transition-transform flex-shrink-0" />
-                    <span className="truncate">⚓ Nearest Ports & Shelter Harbors</span>
+                    <span className="truncate">⚓ Nearest Ports & Shelter around {activeShortPlace}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendQuery('How can I save diesel on fishing trips?')}
+                    className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-amber-400/40 transition-all flex items-center gap-2 group"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform flex-shrink-0">⛽</span>
+                    <span className="truncate">⛽ How to save diesel on long hauls?</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendQuery('When is the monsoon fishing ban in India?')}
+                    className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-blue-400/40 transition-all flex items-center gap-2 group"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform flex-shrink-0">🗓️</span>
+                    <span className="truncate">🗓️ When does the Monsoon Ban start?</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendQuery('What is VHF Channel 16 emergency protocol?')}
+                    className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-red-400/40 transition-all flex items-center gap-2 group"
+                  >
+                    <AlertTriangle size={16} className="text-red-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+                    <span className="truncate">🚨 Emergency Coast Guard & VHF 16</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSendQuery('What bait and gear is best for Tuna?')}
+                    className="text-left text-xs p-3 rounded-xl bg-orca-surface border border-orca-border text-orca-muted hover:text-white hover:border-teal-400/40 transition-all flex items-center gap-2 group"
+                  >
+                    <span className="text-base group-hover:scale-110 transition-transform flex-shrink-0">🎣</span>
+                    <span className="truncate">🎣 What bait and gear for Tuna?</span>
                   </button>
                 </div>
               </div>
@@ -397,15 +690,73 @@ export default function ChatPage() {
                   {/* ORCA Bot Response Bubble */}
                   {msg.sender === 'orca' && (
                     <div className="space-y-4">
-                      {/* Natural Language AI Summary Bubble */}
-                      <div className="bg-orca-surface border border-orca-border p-4 rounded-2xl text-sm text-white leading-relaxed shadow-sm">
-                        {renderFormattedText(msg.summary)}
-                        {msg.isLive && (
-                          <div className="mt-2.5 flex items-center gap-2 text-[11px] text-emerald-400 font-medium">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <span>Powered by live XGBoost model service ({msg.locationSector || 'Coastal Sector'})</span>
+                      {/* Natural Language AI Summary Bubble with Action Toolbar */}
+                      <div className="bg-orca-surface border border-orca-border rounded-2xl text-sm text-white leading-relaxed shadow-sm overflow-hidden">
+                        {/* Header Action Toolbar */}
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-orca-surface-2/60 border-b border-orca-border text-xs">
+                          <div className="flex items-center gap-2 text-orca-muted">
+                            <span className="text-orca-teal font-bold tracking-wider uppercase text-[10px] flex items-center gap-1.5">
+                              <Sparkles size={12} className="text-orca-teal" />
+                              ORCA Intelligence
+                            </span>
+                            <span className="text-orca-border">•</span>
+                            <span className="text-[11px] text-orca-muted truncate max-w-[200px]">
+                              {msg.locationName || 'Coastal Basin'}
+                            </span>
+                            {msg.locationSector && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orca-bg border border-orca-border text-orca-teal font-mono">
+                                {msg.locationSector}
+                              </span>
+                            )}
                           </div>
-                        )}
+
+                          <div className="flex items-center gap-1.5">
+                            {/* Voice Readout (TTS) */}
+                            <button
+                              type="button"
+                              onClick={() => handleSpeakText(msg.id, msg.summary)}
+                              title={speakingMsgId === msg.id ? "Stop voice readout" : "Listen to marine briefing"}
+                              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                                speakingMsgId === msg.id
+                                  ? 'bg-orca-teal text-orca-bg font-bold shadow-sm shadow-orca-teal/20 animate-pulse'
+                                  : 'bg-orca-bg/80 text-orca-muted hover:text-white hover:bg-orca-surface-2 border border-orca-border'
+                              }`}
+                            >
+                              {speakingMsgId === msg.id ? (
+                                <>
+                                  <VolumeX size={12} />
+                                  <span>Stop</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Volume2 size={12} />
+                                  <span>Listen</span>
+                                </>
+                              )}
+                            </button>
+
+                            {/* Copy Text */}
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(msg.id, msg.summary)}
+                              title="Copy briefing text"
+                              className="p-1 rounded-lg text-orca-muted hover:text-white hover:bg-orca-surface-2 border border-orca-border bg-orca-bg/80 transition-all"
+                            >
+                              {copiedMsgId === msg.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Content Body */}
+                        <div className="p-4">
+                          {renderFormattedText(msg.summary)}
+                          {msg.isLive && (
+                            <div className="mt-3 flex items-center gap-2 text-[11px] text-emerald-400 font-medium pt-2 border-t border-orca-border/40">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>Powered by live XGBoost model service ({msg.locationSector || 'Coastal Sector'})</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* ── Case 1: Safe House Refuge Haven Card ── */}
@@ -978,9 +1329,27 @@ export default function ChatPage() {
           </div>
 
           {/* Fixed Sticky Input Form */}
-          <div className="p-3 md:p-4 border-t border-orca-border bg-orca-surface/95 backdrop-blur flex-shrink-0 sticky bottom-0 z-20">
+          <div className="p-3 md:p-4 border-t border-orca-border bg-orca-surface/95 backdrop-blur flex-shrink-0 sticky bottom-0 z-20 mb-14 md:mb-0 pb-safe">
+            {isListening && (
+              <div className="max-w-4xl mx-auto mb-2.5 flex items-center justify-between px-3.5 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs animate-pulse">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  <span className="font-bold">Deck Voice Input Active:</span>
+                  <span className="text-red-300">Speak now (e.g. "Can I sail today?", "Where is my safe house?", "Tuna fishing advice")</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  className="px-2 py-0.5 rounded-lg bg-red-500/20 text-red-300 text-[10px] font-bold hover:bg-red-500/30"
+                >
+                  Done
+                </button>
+              </div>
+            )}
             <form onSubmit={handleSend} className="max-w-4xl mx-auto flex items-center gap-2">
-              <div className="flex-1 flex items-center gap-2 bg-orca-bg rounded-2xl border border-orca-border px-3.5 py-2.5 focus-within:border-orca-teal/60 transition-colors">
+              <div className={`flex-1 flex items-center gap-2 bg-orca-bg rounded-2xl border px-3.5 py-2.5 transition-colors ${
+                isListening ? 'border-red-500/60 ring-1 ring-red-500/30' : 'border-orca-border focus-within:border-orca-teal/60'
+              }`}>
                 <button
                   type="button"
                   title="Attach telemetry"
@@ -992,16 +1361,21 @@ export default function ChatPage() {
                   type="text"
                   value={inputQuery}
                   onChange={e => setInputQuery(e.target.value)}
-                  placeholder={t('chat.ask_placeholder')}
+                  placeholder={isListening ? "Listening... speak now..." : t('chat.ask_placeholder')}
                   className="flex-1 bg-transparent text-sm text-white placeholder-orca-muted focus:outline-none"
                   disabled={isProcessing}
                 />
                 <button
                   type="button"
-                  title="Voice input"
-                  className="text-orca-muted hover:text-white transition-colors"
+                  onClick={toggleVoiceInput}
+                  title={isListening ? "Stop listening" : "Deck voice input (Hands-free)"}
+                  className={`p-1.5 rounded-xl transition-all ${
+                    isListening
+                      ? 'bg-red-500/20 text-red-400 shadow-sm shadow-red-500/30 animate-pulse'
+                      : 'text-orca-muted hover:text-white hover:bg-orca-surface-2'
+                  }`}
                 >
-                  <Mic size={18} />
+                  {isListening ? <MicOff size={18} /> : <Mic size={18} />}
                 </button>
               </div>
 

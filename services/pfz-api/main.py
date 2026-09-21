@@ -78,29 +78,29 @@ templates = Jinja2Templates(directory=templates_dir)
 
 # Pydantic Request Models
 class CoordinateItem(BaseModel):
-    latitude: float = Field(..., example=10.542, description="Latitude in degrees (-90 to 90)")
-    longitude: float = Field(..., example=76.214, description="Longitude in degrees (-180 to 180)")
+    latitude: float = Field(..., description="Latitude in degrees (-90 to 90)", json_schema_extra={"example": 10.542})
+    longitude: float = Field(..., description="Longitude in degrees (-180 to 180)", json_schema_extra={"example": 76.214})
 
 class BatchCoordinatesRequest(BaseModel):
     coordinates: List[CoordinateItem] = Field(
         ..., 
         description="List of coordinates (typically 12-20 input lat/long pairs)",
-        min_items=1,
-        max_items=100
+        min_length=1,
+        max_length=100
     )
-    year: Optional[int] = Field(None, example=2024, description="Optional target year (2020-2026)")
-    month: Optional[int] = Field(None, example=6, description="Optional target month (1-12)")
+    year: Optional[int] = Field(None, description="Optional target year (2020-2026)", json_schema_extra={"example": 2024})
+    month: Optional[int] = Field(None, description="Optional target month (1-12)", json_schema_extra={"example": 6})
 
 from datetime import datetime
 
 class CustomFeatureItem(BaseModel):
-    latitude: float
-    longitude: float
-    temperature: float
-    salinity: float
-    eastward_current: float
-    northward_current: float
-    chlorophyll: Optional[float] = None
+    latitude: float = Field(..., description="Latitude in degrees", json_schema_extra={"example": 10.542})
+    longitude: float = Field(..., description="Longitude in degrees", json_schema_extra={"example": 76.214})
+    temperature: float = Field(..., description="Sea surface temperature in C", json_schema_extra={"example": 28.5})
+    salinity: float = Field(..., description="Salinity in PSU", json_schema_extra={"example": 35.0})
+    eastward_current: float = Field(..., description="Eastward water velocity uo (m/s)", json_schema_extra={"example": 0.15})
+    northward_current: float = Field(..., description="Northward water velocity vo (m/s)", json_schema_extra={"example": -0.08})
+    chlorophyll: Optional[float] = Field(None, description="Chlorophyll-a concentration (mg/m^3)", json_schema_extra={"example": 0.45})
 
 class BatchCustomRequest(BaseModel):
     items: list[CustomFeatureItem]
@@ -239,7 +239,7 @@ def predict_single_custom(item: CustomFeatureItem):
     if model is None:
         raise HTTPException(status_code=500, detail="Model not loaded.")
     
-    dict_data = item.dict()
+    dict_data = item.model_dump()
     if dict_data.get("current_speed") is None:
         dict_data["current_speed"] = float(np.sqrt(dict_data["eastward_current"]**2 + dict_data["northward_current"]**2))
 
@@ -268,7 +268,7 @@ def predict_single_custom(item: CustomFeatureItem):
 # Web UI Dashboard Route
 @app.get("/", response_class=HTMLResponse, summary="Interactive Web Dashboard")
 def render_dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 if __name__ == "__main__":

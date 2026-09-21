@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { NOMINATIM_URL, NOMINATIM_UA, MANGALORE_FALLBACK } from '../config/map.js';
+import { useAuth } from './AuthContext.jsx';
 
 const LocationContext = createContext(null);
 
@@ -54,6 +55,9 @@ export const KNOWN_COASTAL_LOCATIONS = [
 ];
 
 export function LocationProvider({ children }) {
+  const auth = useAuth();
+  const user = auth?.user;
+
   const [currentLocation, setCurrentLocation] = useState(() => {
     const saved = localStorage.getItem('orca_current_location');
     if (saved) {
@@ -66,6 +70,27 @@ export function LocationProvider({ children }) {
     }
     return KNOWN_COASTAL_LOCATIONS.find(l => l.key === 'mangalore');
   });
+
+  // Whenever an authenticated user's safe_house loads or changes, automatically update the active harbor
+  useEffect(() => {
+    if (user?.safe_house?.lat && user?.safe_house?.lon) {
+      const match = KNOWN_COASTAL_LOCATIONS.find(
+        l => Math.abs(l.lat - user.safe_house.lat) < 0.15 && Math.abs(l.lon - user.safe_house.lon) < 0.15
+      );
+      if (match) {
+        setCurrentLocation(match);
+      } else {
+        setCurrentLocation({
+          key: 'user-safehouse',
+          name: user.safe_house.label || 'Home Port Basin',
+          lat: user.safe_house.lat,
+          lon: user.safe_house.lon,
+          region: user.safe_house.region || 'Coastal Waters',
+          sector: user.safe_house.sector || 'Home Waters',
+        });
+      }
+    }
+  }, [user?.id, user?.safe_house?.lat, user?.safe_house?.lon]);
 
   useEffect(() => {
     if (currentLocation) {

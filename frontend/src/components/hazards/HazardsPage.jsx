@@ -16,15 +16,29 @@ import {
   ShieldCheck,
   MapPin,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Map as MapIcon,
+  List
 } from 'lucide-react';
 
 function MapController({ center, zoom = 8 }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
-      map.flyTo(center, zoom, { animate: true, duration: 1 });
-      map.invalidateSize();
+    if (
+      center &&
+      Array.isArray(center) &&
+      center.length === 2 &&
+      typeof center[0] === 'number' &&
+      !isNaN(center[0]) &&
+      typeof center[1] === 'number' &&
+      !isNaN(center[1])
+    ) {
+      try {
+        map.flyTo(center, zoom, { animate: true, duration: 1 });
+        map.invalidateSize();
+      } catch (err) {
+        console.warn('Map flyTo skipped:', err);
+      }
     }
   }, [center, zoom, map]);
   return null;
@@ -41,14 +55,15 @@ export default function HazardsPage() {
   const [filterSeverity, setFilterSeverity] = useState('ALL');
   const [expandedId, setExpandedId] = useState(null);
   const [showInstructionModal, setShowInstructionModal] = useState(false);
+  const [mobileView, setMobileView] = useState('alerts'); // 'alerts' | 'map'
 
   useEffect(() => {
     async function loadHazards() {
       try {
         const res = await getHazardAlerts();
-        setAlerts(res.alerts);
-        setCounts(res.counts);
-        if (res.alerts.length > 0) {
+        if (res && Array.isArray(res.alerts) && res.alerts.length > 0) {
+          setAlerts(res.alerts);
+          setCounts(res.counts || { critical: 0, warning: 0, advisory: 0 });
           setSelectedHazard(res.alerts[0]);
         }
       } catch (err) {
@@ -58,14 +73,26 @@ export default function HazardsPage() {
     loadHazards();
   }, []);
 
+  const getValidCoordinate = (lat, lon, fallback = [13.200, 73.650]) => {
+    const parsedLat = parseFloat(lat);
+    const parsedLon = parseFloat(lon);
+    if (!isNaN(parsedLat) && !isNaN(parsedLon) && isFinite(parsedLat) && isFinite(parsedLon)) {
+      return [parsedLat, parsedLon];
+    }
+    return fallback;
+  };
+
   const criticalHazard = alerts.find(a => (a.severity || '').toUpperCase() === 'CRITICAL');
   const filteredAlerts = filterSeverity === 'ALL'
     ? alerts
     : alerts.filter(a => (a.severity || '').toUpperCase() === filterSeverity);
 
-  const mapCenter = selectedHazard && selectedHazard.lat
-    ? [selectedHazard.lat, selectedHazard.lon]
-    : [currentLocation?.lat || 13.2, currentLocation?.lon || 73.8];
+  const mapCenter = selectedHazard && selectedHazard.lat !== undefined
+    ? getValidCoordinate(selectedHazard.lat, selectedHazard.lon, [13.200, 73.650])
+    : currentLocation && currentLocation.lat !== undefined
+    ? getValidCoordinate(currentLocation.lat, currentLocation.lon, [13.200, 73.650])
+    : [13.200, 73.650];
+
 
   return (
     <div className="h-screen bg-orca-bg flex flex-col overflow-hidden">
@@ -95,11 +122,42 @@ export default function HazardsPage() {
         </div>
       )}
 
-      {/* ── Main Layout: Sidebar & Full-Height Live Map (Fix A5) ── */}
+      {/* Mobile View Toggle Bar */}
+      <div className="md:hidden flex items-center justify-between p-2.5 bg-orca-surface border-b border-orca-border flex-shrink-0 z-20">
+        <div className="flex items-center gap-1.5 bg-orca-bg p-1 rounded-xl border border-orca-border w-full">
+          <button
+            onClick={() => setMobileView('alerts')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'alerts'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <AlertTriangle size={14} />
+            <span>Alerts ({filteredAlerts.length})</span>
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'map'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <MapIcon size={14} />
+            <span>Live Map</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main Layout: Sidebar & Full-Height Live Map ── */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* Left Hazard Cards Sidebar */}
-        <div className="w-full md:w-[420px] lg:w-[440px] bg-orca-surface border-r border-orca-border flex flex-col h-full z-10 flex-shrink-0">
+        <div className={`w-full md:w-[420px] lg:w-[440px] bg-orca-surface border-r border-orca-border flex-col h-full z-10 flex-shrink-0 mb-14 md:mb-0 ${
+          mobileView === 'map' ? 'hidden md:flex' : 'flex'
+        }`}>
+
           
           {/* Summary Badges */}
           <div className="p-4 border-b border-orca-border space-y-3 bg-orca-surface-2/20 flex-shrink-0">
@@ -240,7 +298,10 @@ export default function HazardsPage() {
         </div>
 
         {/* ── Right Leaflet Map Panel (Full Height & Functional) ── */}
-        <div className="flex-1 min-h-0 h-full relative bg-orca-bg">
+        <div className={`flex-1 min-h-0 h-full relative bg-orca-bg mb-14 md:mb-0 ${
+          mobileView === 'alerts' ? 'hidden md:flex' : 'flex'
+        }`}>
+
           <MapContainer
             center={mapCenter}
             zoom={8}
@@ -252,7 +313,7 @@ export default function HazardsPage() {
 
             {/* Base Harbor Reference */}
             <CircleMarker
-              center={[currentLocation?.lat || 12.8698, currentLocation?.lon || 74.8431]}
+              center={getValidCoordinate(currentLocation?.lat, currentLocation?.lon, [12.8698, 74.8431])}
               radius={7}
               pathOptions={{ color: '#00D8FF', fillColor: '#00D8FF', fillOpacity: 0.9, weight: 2 }}
             >
@@ -265,18 +326,22 @@ export default function HazardsPage() {
 
             {/* Hazard Exclusion Circles */}
             {alerts.map(h => {
-              if (!h.lat || !h.lon) return null;
+              const hLat = parseFloat(h.lat);
+              const hLon = parseFloat(h.lon);
+              if (isNaN(hLat) || isNaN(hLon) || !isFinite(hLat) || !isFinite(hLon)) return null;
+
               const isSelected = selectedHazard?.id === h.id;
+              const radiusVal = (parseFloat(h.radiusKm) || 30) * 1000;
 
               return (
                 <React.Fragment key={h.id}>
                   {isSelected && (
                     <Circle
-                      center={[h.lat, h.lon]}
-                      radius={(h.radiusKm + 10) * 1000}
+                      center={[hLat, hLon]}
+                      radius={radiusVal + 10000}
                       pathOptions={{
                         color: '#FFFFFF',
-                        fillColor: h.fillColor,
+                        fillColor: h.fillColor || '#EF4444',
                         fillOpacity: 0.1,
                         dashArray: '4, 4',
                         weight: 2,
@@ -285,12 +350,12 @@ export default function HazardsPage() {
                   )}
 
                   <Circle
-                    center={[h.lat, h.lon]}
-                    radius={(h.radiusKm || 30) * 1000}
+                    center={[hLat, hLon]}
+                    radius={radiusVal}
                     pathOptions={{
-                      color: isSelected ? '#FFFFFF' : h.color,
-                      fillColor: h.fillColor,
-                      fillOpacity: isSelected ? 0.35 : h.fillOpacity,
+                      color: isSelected ? '#FFFFFF' : (h.color || '#EF4444'),
+                      fillColor: h.fillColor || '#EF4444',
+                      fillOpacity: isSelected ? 0.35 : (h.fillOpacity || 0.2),
                       weight: isSelected ? 3 : 2,
                       dashArray: '6, 6',
                     }}
@@ -302,23 +367,24 @@ export default function HazardsPage() {
                       <div className="text-xs p-1 space-y-1">
                         <strong className="text-red-500 font-bold block">{h.title}</strong>
                         <p>{h.guidance}</p>
-                        <p className="text-[10px] text-gray-500 font-mono">Radius: {h.radiusKm} km exclusion</p>
+                        <p className="text-[10px] text-gray-500 font-mono">Radius: {h.radiusKm || 30} km exclusion</p>
                       </div>
                     </Popup>
                   </Circle>
 
                   <CircleMarker
-                    center={[h.lat, h.lon]}
+                    center={[hLat, hLon]}
                     radius={6}
                     pathOptions={{
-                      color: h.color,
-                      fillColor: h.color,
+                      color: h.color || '#EF4444',
+                      fillColor: h.color || '#EF4444',
                       fillOpacity: 1,
                     }}
                   />
                 </React.Fragment>
               );
             })}
+
           </MapContainer>
 
           {/* Floating Map Legend */}

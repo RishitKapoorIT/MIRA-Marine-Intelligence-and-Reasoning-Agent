@@ -57,6 +57,7 @@
             align-items: center;
             padding: 20px 28px;
             background: var(--card-bg);
+            -webkit-backdrop-filter: blur(16px);
             backdrop-filter: blur(16px);
             border: 1px solid var(--card-border);
             border-radius: 16px;
@@ -89,6 +90,7 @@
             letter-spacing: -0.5px;
             background: linear-gradient(90deg, #fff, #a5f3fc);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -140,6 +142,7 @@
 
         .card {
             background: var(--card-bg);
+            -webkit-backdrop-filter: blur(16px);
             backdrop-filter: blur(16px);
             border: 1px solid var(--card-border);
             border-radius: 16px;
@@ -392,6 +395,7 @@
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7);
+            -webkit-backdrop-filter: blur(8px);
             backdrop-filter: blur(8px);
             display: flex;
             align-items: center;
@@ -400,6 +404,24 @@
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s ease;
+        }
+
+        .btn-group-sm {
+            display: flex;
+            gap: 6px;
+        }
+
+        .no-underline {
+            text-decoration: none;
+        }
+
+        .modal-title-text {
+            font-size: 16px;
+            color: #fff;
+        }
+
+        .modal-title-icon {
+            color: var(--primary);
         }
 
         .modal-overlay.active {
@@ -487,7 +509,7 @@
                     <div class="card-title">
                         <i class="fa-solid fa-location-dot"></i> Input 20 Coordinates
                     </div>
-                    <div style="display: flex; gap: 6px;">
+                    <div class="btn-group-sm">
                         <button class="btn-action-sm" onclick="randomize20Coords()">
                             <i class="fa-solid fa-dice"></i> 20 Random
                         </button>
@@ -499,8 +521,8 @@
 
                 <div class="controls-bar">
                     <div class="input-group">
-                        <label>Target Year</label>
-                        <select id="targetYear" class="form-select">
+                        <label for="targetYear">Target Year</label>
+                        <select id="targetYear" class="form-select" title="Target Year" aria-label="Target Year">
                             <option value="">Auto / Random</option>
                             <option value="2024" selected>2024</option>
                             <option value="2023">2023</option>
@@ -508,8 +530,8 @@
                         </select>
                     </div>
                     <div class="input-group">
-                        <label>Target Month</label>
-                        <select id="targetMonth" class="form-select">
+                        <label for="targetMonth">Target Month</label>
+                        <select id="targetMonth" class="form-select" title="Target Month" aria-label="Target Month">
                             <option value="">Auto / Random</option>
                             <option value="1">January</option>
                             <option value="3">March</option>
@@ -535,7 +557,7 @@
                     <div class="card-title">
                         <i class="fa-solid fa-chart-pie"></i> Fishing Zone Predictions & Analysis
                     </div>
-                    <a href="/docs" target="_blank" class="btn-action-sm" style="text-decoration: none;">
+                    <a href="/docs" target="_blank" class="btn-action-sm no-underline" title="Swagger OpenAPI Docs" aria-label="Swagger OpenAPI Docs">
                         <i class="fa-solid fa-code"></i> Swagger OpenAPI Docs
                     </a>
                 </div>
@@ -591,11 +613,11 @@
     <div class="modal-overlay" id="featureModal">
         <div class="modal-card">
             <div class="modal-header">
-                <h3 style="font-size: 16px; color: #fff;">
-                    <i class="fa-solid fa-sliders" style="color: var(--primary);"></i> 
+                <h3 class="modal-title-text">
+                    <i class="fa-solid fa-sliders modal-title-icon"></i> 
                     Generated Environmental Features (#<span id="modalPointIdx"></span>)
                 </h3>
-                <button class="btn-action-sm" onclick="closeModal()"><i class="fa-solid fa-xmark"></i></button>
+                <button class="btn-action-sm" onclick="closeModal()" title="Close modal" aria-label="Close modal"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="feature-grid" id="modalFeatureGrid">
                 <!-- Dynamically filled -->

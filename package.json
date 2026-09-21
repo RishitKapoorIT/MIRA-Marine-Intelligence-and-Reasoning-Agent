@@ -1,0 +1,12 @@
+{
+  "name": "orca-marine-intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ORCA — Marine Intelligence for Indian Coastal Stakeholders",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "vercel-build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "preview": "npm --prefix frontend run preview"
+  }
+}

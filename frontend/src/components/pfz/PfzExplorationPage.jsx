@@ -16,7 +16,9 @@ import {
   Leaf,
   ChevronDown,
   ChevronUp,
-  MapPin
+  MapPin,
+  List,
+  Map as MapIcon
 } from 'lucide-react';
 
 function MapController({ center, zoom }) {
@@ -47,6 +49,8 @@ export default function PfzExplorationPage() {
   const [isLiveBackend, setIsLiveBackend] = useState(false);
   const [lastUpdated, setLastUpdated] = useState('');
   const [expandedZoneId, setExpandedZoneId] = useState(null);
+  const [mobileView, setMobileView] = useState('list'); // 'list' | 'map'
+
 
   useEffect(() => {
     async function loadPfz() {
@@ -78,15 +82,46 @@ export default function PfzExplorationPage() {
 
   const centerCoord = selectedZone ? [selectedZone.lat, selectedZone.lon] : [activeLat, activeLon];
 
+
   return (
     <div className="h-screen bg-orca-bg flex flex-col overflow-hidden">
       <Header />
 
-      {/* Main layout with definite full-height parent (Fix A4.1) */}
+      {/* Mobile View Toggle Bar */}
+      <div className="md:hidden flex items-center justify-between p-2.5 bg-orca-surface border-b border-orca-border flex-shrink-0 z-20">
+        <div className="flex items-center gap-1.5 bg-orca-bg p-1 rounded-xl border border-orca-border w-full">
+          <button
+            onClick={() => setMobileView('list')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'list'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <List size={14} />
+            <span>Zones ({zones.length})</span>
+          </button>
+          <button
+            onClick={() => setMobileView('map')}
+            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all touch-target ${
+              mobileView === 'map'
+                ? 'bg-orca-teal text-orca-bg shadow-sm'
+                : 'text-orca-muted hover:text-white'
+            }`}
+          >
+            <MapIcon size={14} />
+            <span>Live Map</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main layout with definite full-height parent */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         
         {/* ── Left Exploration Sidebar ── */}
-        <div className="w-full md:w-[420px] lg:w-[440px] bg-orca-surface border-r border-orca-border flex flex-col h-full z-10 flex-shrink-0">
+        <div className={`w-full md:w-[420px] lg:w-[440px] bg-orca-surface border-r border-orca-border flex-col h-full z-10 flex-shrink-0 mb-14 md:mb-0 ${
+          mobileView === 'map' ? 'hidden md:flex' : 'flex'
+        }`}>
           
           {/* Header & Filter Pills */}
           <div className="p-4 border-b border-orca-border space-y-3 bg-orca-surface-2/20 flex-shrink-0">
@@ -98,6 +133,7 @@ export default function PfzExplorationPage() {
                 <h2 className="text-base font-extrabold text-white tracking-tight">
                   {t('pfz.title')}
                 </h2>
+
               </div>
               <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${isLiveBackend ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'}`}>
                 {isLiveBackend ? 'XGBoost Live ML' : 'Simulated Layer'}
@@ -262,7 +298,10 @@ export default function PfzExplorationPage() {
         </div>
 
         {/* ── Right Live Leaflet Map Panel (Guaranteed Full Height & Visible) ── */}
-        <div className="flex-1 min-h-0 h-full relative bg-orca-bg">
+        <div className={`flex-1 min-h-0 h-full relative bg-orca-bg mb-14 md:mb-0 ${
+          mobileView === 'list' ? 'hidden md:flex' : 'flex'
+        }`}>
+
           <MapContainer
             center={centerCoord}
             zoom={9}

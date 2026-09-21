@@ -15,7 +15,8 @@ export default function LeftSidebar({ userPos, mapRef }) {
   }
 
   return (
-    <aside className="w-64 flex-shrink-0 bg-orca-surface border-r border-orca-border p-4 flex flex-col overflow-y-auto">
+    <aside className="hidden md:flex w-64 flex-shrink-0 bg-orca-surface border-r border-orca-border p-4 flex-col overflow-y-auto">
+
 
       {/* Header chip */}
       <div className="flex items-center justify-between mb-4">
